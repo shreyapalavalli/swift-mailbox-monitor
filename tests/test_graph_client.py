@@ -101,3 +101,28 @@ def test_cached_account_counts_as_authenticated(tmp_path):
     service = GraphAuthService(cache_path=str(path))
     assert service.is_authenticated is True
     assert service._account["username"] == "me@outlook.com"
+
+
+def test_logout_clears_persisted_cache(tmp_path):
+    path = tmp_path / "cache.json"
+    path.write_text(
+        json.dumps(
+            {
+                "Account": {
+                    "uid.utid-login.windows.net-consumers": {
+                        "home_account_id": "uid.utid",
+                        "environment": "login.windows.net",
+                        "realm": "consumers",
+                        "local_account_id": "uid",
+                        "username": "me@outlook.com",
+                        "authority_type": "MSSTS",
+                    }
+                }
+            }
+        )
+    )
+    service = GraphAuthService(cache_path=str(path))
+    assert service.is_authenticated is True
+    service.logout()
+    assert service.is_authenticated is False
+    assert GraphAuthService(cache_path=str(path)).is_authenticated is False

@@ -146,6 +146,10 @@ class GraphAuthService:
             raise RuntimeError("Microsoft did not return an access token.")
 
     def logout(self) -> None:
+        for account in self._app.get_accounts():
+            self._app.remove_account(account)
+
+        self._save_cache()
         self._account = None
         self._auth_flow = None
         self._access_token = None
