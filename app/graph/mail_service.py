@@ -7,10 +7,13 @@ from app.graph.graph_client import GraphClient
 from app.models.email_message import EmailMessage
 
 
+PREFER_TEXT_BODY = {"Prefer": 'outlook.body-content-type="text"'}
+
+
 class GraphMailService:
 
-    def __init__(self):
-        self.graph_client = GraphClient()
+    def __init__(self, graph_client: GraphClient | None = None):
+        self.graph_client = graph_client or GraphClient()
 
     @staticmethod
     def _mailbox_path() -> str:
@@ -52,7 +55,8 @@ class GraphMailService:
 
             response = await self.graph_client.get(
                 url,
-                params=params
+                params=params,
+                headers=PREFER_TEXT_BODY
             )
 
             params = None
@@ -69,13 +73,14 @@ class GraphMailService:
 
     async def fetch_unread_messages(
         self,
+        folder: str = "inbox",
         top: int = 50
     ) -> list[EmailMessage]:
 
         url = (
             f"{settings.graph_base_url}"
             f"/{self._mailbox_path()}"
-            f"/mailFolders/inbox/messages"
+            f"/mailFolders/{quote(folder, safe='')}/messages"
         )
 
         params = {
@@ -89,7 +94,8 @@ class GraphMailService:
                 "isRead,"
                 "hasAttachments"
             ),
-            "$orderby": "receivedDateTime desc",
+            # No $orderby: combined with this $filter, Graph can reject the query as
+            # InefficientFilter (400). Sorted client-side below instead.
             "$top": top,
         }
 
@@ -99,18 +105,28 @@ class GraphMailService:
 
             response = await self.graph_client.get(
                 url,
-                params=params
+                params=params,
+                headers=PREFER_TEXT_BODY
             )
 
             params = None
 
             for item in response.get("value", []):
 
-                messages.append(
-                    self._map_message(item)
-                )
+                message = self._map_message(item)
+                message.folder = folder
+                messages.append(message)
 
             url = response.get("@odata.nextLink")
+
+        # Newest first; messages without a received time last.
+        messages.sort(
+            key=lambda m: (
+                m.received_date_time is not None,
+                m.received_date_time.timestamp() if m.received_date_time else 0.0,
+            ),
+            reverse=True,
+        )
 
         return messages
 
@@ -122,7 +138,7 @@ class GraphMailService:
         url = (
             f"{settings.graph_base_url}"
             f"/{self._mailbox_path()}"
-            f"/messages/{message_id}"
+            f"/messages/{quote(message_id, safe='')}"
         )
 
         params = {
@@ -139,7 +155,8 @@ class GraphMailService:
 
         response = await self.graph_client.get(
             url,
-            params=params
+            params=params,
+            headers=PREFER_TEXT_BODY
         )
 
         return self._map_message(response)
@@ -152,7 +169,7 @@ class GraphMailService:
         url = (
             f"{settings.graph_base_url}"
             f"/{self._mailbox_path()}"
-            f"/messages/{message_id}"
+            f"/messages/{quote(message_id, safe='')}"
         )
 
         await self.graph_client.patch(
@@ -160,6 +177,46 @@ class GraphMailService:
             {
                 "isRead": True
             }
+        )
+
+    async def forward_message(
+        self,
+        message_id: str,
+        to_address: str,
+        comment: str
+    ) -> None:
+
+        await self.graph_client.post(
+            self._message_action_url(message_id, "forward"),
+            {
+                "comment": comment,
+                "toRecipients": [
+                    {"emailAddress": {"address": to_address}}
+                ],
+            }
+        )
+
+    async def reply_all(
+        self,
+        message_id: str,
+        comment: str
+    ) -> None:
+
+        await self.graph_client.post(
+            self._message_action_url(message_id, "replyAll"),
+            {"comment": comment}
+        )
+
+    def _message_action_url(
+        self,
+        message_id: str,
+        action: str
+    ) -> str:
+
+        return (
+            f"{settings.graph_base_url}"
+            f"/{self._mailbox_path()}"
+            f"/messages/{quote(message_id, safe='')}/{action}"
         )
 
     def _map_message(

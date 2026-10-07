@@ -1,0 +1,6 @@
+{
+  "subject": "New sign-in detected for your Microsoft account",
+  "sender": "account-security-noreply@accountprotection.microsoft.com",
+  "received_date_time": "2026-10-07T07:33:06Z",
+  "body": "Microsoft account\r\nNew sign-in detected\r\nYou recently signed in with your Microsoft account MT**I@outlook.com<mailto:MT**I@outlook.com>. To help keep you safe, here are a few details:\r\nCountry/region: India\r\nDate: 10/7/2026 7:33 AM (GMT)\r\nService: SWIFT-Mailbox-Monitor\r\nIP address: 2405:201:d007:d032:2509:5d30:144f:d5e1\r\nIf this was you, then you can safely ignore this email.\r\nIf you're not sure this was you, a malicious user might have access to your security information. You can review and change your information below.\r\nReview account activity<https://account.live.com/a?fn=email>\r\nYou can also opt out<https://account.live.com/SecurityNotifications/Update> or change where you receive security notifications.\r\nThanks,\r\nThe Microsoft account team\r\nPrivacy Statement<https://go.microsoft.com/fwlink/?LinkId=521839>\r\nMicrosoft Corporation, One Microsoft Way, Redmond, WA 98052\r\n"
+}

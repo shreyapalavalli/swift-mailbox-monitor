@@ -9,7 +9,29 @@ class Settings(BaseSettings):
 
     graph_base_url: str = "https://graph.microsoft.com/v1.0"
     graph_redirect_uri: str = "http://localhost:8000/auth/callback"
-    graph_scopes: str = "Mail.ReadWrite User.Read"
+    graph_scopes: str = "Mail.ReadWrite Mail.Send User.Read"
+
+    token_cache_path: str = ".token_cache.json"
+    database_path: str = "data/swift_monitor.db"
+    cst_mailbox: str = "shreyapalavalli@gmail.com"
+    cancellation_action_mx_types: str = "camt.056"
+    poll_folders: str = "inbox,junkemail"
+    poll_interval_seconds: int = 30
+    poller_enabled: bool = True
+    actions_enabled: bool = True
+    frontend_origin: str = "http://localhost:5000"
+
+    @property
+    def cancellation_action_mx_type_list(self) -> list[str]:
+        return [
+            item.strip().lower()
+            for item in self.cancellation_action_mx_types.split(",")
+            if item.strip()
+        ]
+
+    @property
+    def poll_folder_list(self) -> list[str]:
+        return [item.strip() for item in self.poll_folders.split(",") if item.strip()]
 
     @property
     def graph_scope_list(self) -> list[str]:

@@ -17,3 +17,5 @@ class EmailMessage(BaseModel):
     is_read: bool = False
 
     has_attachments: bool = False
+
+    folder: str | None = None
