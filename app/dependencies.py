@@ -17,3 +17,11 @@ processor = SwiftProcessor(
     settings.cst_mailbox,
     settings.cancellation_action_mx_type_list,
 )
+
+
+def get_repository() -> SwiftRepository:
+    return repository
+
+
+def get_processor() -> SwiftProcessor:
+    return processor

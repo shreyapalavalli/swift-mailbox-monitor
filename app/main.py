@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.mail_routes import auth_router, router as mail_router
+from app.api.swift_routes import process_router, router as swift_router
 from app.config.settings import settings
 from app.dependencies import processor
 from app.services.poller import run_poller
@@ -41,6 +42,8 @@ app.add_middleware(
 
 app.include_router(mail_router)
 app.include_router(auth_router)
+app.include_router(swift_router)
+app.include_router(process_router)
 
 
 @app.get("/health")
