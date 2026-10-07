@@ -57,7 +57,8 @@ class GraphAuthService:
             0o600,
         )
         with os.fdopen(fd, "w", encoding="utf-8") as cache_file:
-            os.fchmod(cache_file.fileno(), 0o600)
+            if hasattr(os, "fchmod"):  # absent on Windows before Python 3.13
+                os.fchmod(cache_file.fileno(), 0o600)
             cache_file.write(self._cache.serialize())
 
         self._cache.has_state_changed = False

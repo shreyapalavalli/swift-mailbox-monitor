@@ -125,8 +125,15 @@ def main(argv=None) -> int:
     if args.count < 1 or args.interval < 0 or (args.live_count is not None and args.live_count < 1):
         print("error: --count and --live-count must be >= 1 and --interval >= 0", file=sys.stderr)
         return 2
-    if args.reset and os.path.exists(args.db):
-        os.remove(args.db)
+    if args.reset:
+        try:
+            for path in (args.db, f"{args.db}-wal", f"{args.db}-shm"):
+                if os.path.exists(path):
+                    os.remove(path)
+        except PermissionError:
+            print(f"error: {args.db} is in use (on Windows an open database can't be deleted). "
+                  "Stop the backend, then run --reset again.", file=sys.stderr)
+            return 2
     if _has_real_rows(args.db) and not args.force:
         print(f"error: {args.db} holds rows from a real mailbox; refusing to mix in demo data. "
               f"Use another --db (default {DEFAULT_DB}) or --force.", file=sys.stderr)
