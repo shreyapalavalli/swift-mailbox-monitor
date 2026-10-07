@@ -170,6 +170,32 @@ For a live demo, start the backend with `POLL_INTERVAL_SECONDS=10` so each step 
 
 Test mail from Gmail can land in Junk, which is why `junkemail` is polled by default.
 
+## Offline demo data (no mailbox needed)
+
+`scripts/seed_demo_data.py` sends synthetic SWIFTs of every kind through the real pipeline (parser, classifier, rules, processor) and writes the results to a separate SQLite file. An in-memory mailbox stands in for Microsoft Graph, so nothing is read or sent and no sign-in is needed. Use it to build or demo the dashboard without credentials.
+
+```bash
+python -m scripts.seed_demo_data --reset                        # fill data/demo.db
+DATABASE_PATH=data/demo.db POLLER_ENABLED=false uvicorn app.main:app --port 8000
+python -m scripts.seed_demo_data --live --count 1               # optional: +1 SWIFT every 8 s
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--db` | `data/demo.db` | SQLite file to fill. It refuses a database holding real mailbox rows unless `--force`. |
+| `--count` | `40` | SWIFTs in the initial batch (every kind at least once), plus 3 non-SWIFT emails. |
+| `--reset` | off | Delete the database file first. |
+| `--live` / `--interval` / `--live-count` | off / `8` / forever | Keep adding one SWIFT every N seconds. |
+| `--seed` | `7` | Random seed. The same seed gives the same data. |
+
+The seeded data covers every dashboard state:
+- PRIORITY, ACTION_REQUIRED and RESPONDED queue items
+- IN_PROGRESS and RESOLVED items, applied as if an analyst had worked them
+- AUTO_CLOSED, ROUTED_CST and IGNORED log rows
+- one FAILED row
+
+Without a real `GRAPH_CLIENT_ID`, set a placeholder in `.env` (see `frontend-plan.md` §3.2, option A).
+
 ## API
 
 Dashboard (`app/api/swift_routes.py`):

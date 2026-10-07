@@ -8,7 +8,7 @@ Read this first, then the backend [README.md](README.md). Everything below match
 
 ## 1. What the frontend is for
 
-The backend does the work: every 30 seconds it reads the SWIFT mailbox, classifies each SWIFT message, and acts on it automatically (forward, mark read, reply). The frontend is where an operations analyst:
+The backend does the work: every few seconds (`POLL_INTERVAL_SECONDS`, 30 by default and 10 for the demo) it reads the SWIFT mailbox, classifies each SWIFT message, and acts on it automatically (forward, mark read, reply). The frontend is where an operations analyst:
 
 1. **Sees what needs a human.** These are SWIFTs the backend could not, or must not, close on its own: camt.056 cancellations, amendments, unknown messages and ABA requests.
 2. **Gets alerted immediately** when an amendment request arrives (priority), with the key details needed to respond.
@@ -35,7 +35,7 @@ The business rules the backend applies (from the brief's "Key Automation Scenari
 ```
  Browser (analyst)                     Flask frontend (:5001)              FastAPI backend (:8000)
  ─────────────────                     ──────────────────────              ───────────────────────
-  HTML/CSS/JS pages  ◄── GET pages ───  serves templates + static          poller (every 30s)
+  HTML/CSS/JS pages  ◄── GET pages ───  serves templates + static          poller (every 10–30 s)
         │                                (no business logic)                  │  Graph API ⇄ mailbox
         │                                                                     ▼
         └──── fetch() JSON every 3–10s (CORS) ──────────────────────────►  /api/swifts…  ◄── SQLite
@@ -44,28 +44,123 @@ The business rules the backend applies (from the brief's "Key Automation Scenari
 ```
 
 - **Flask only serves pages and static assets.** All data comes from the FastAPI backend. Browser JavaScript calls it directly with `fetch()`, and the backend's CORS setting allows exactly one frontend origin (§3).
-- **Real time means polling.** The backend has no WebSocket or SSE. The dashboard polls with a `since` cursor so each poll returns only what changed (§5). With a 30 s backend poll interval, polling the API every 3–5 s feels instant.
+- **Real time means polling.** The backend has no WebSocket or SSE. The dashboard polls with a `since` cursor so each poll returns only what changed (§5). The backend checks the mailbox every 10–30 s, so polling the API every 3–5 s feels instant.
 - **The backend is the source of truth.** The frontend never talks to Microsoft Graph or SQLite directly, and never decides categories or actions. It displays them and updates status only.
 
 > **Alternative (only if you hit CORS trouble or need to hide the API):** have Flask proxy `/api/*` to `http://127.0.0.1:8000` server-side, for example with `requests`, and have the browser call Flask only. The endpoint contract below stays the same.
 
 ---
 
-## 3. Running both sides locally
+## 3. Getting set up
+
+### 3.1 Code and branch workflow
 
 ```bash
-# Terminal 1: backend (from repo root, venv active; see README for one-time sign-in)
-FRONTEND_ORIGIN=http://localhost:5001 uvicorn app.main:app --port 8000
+git clone https://github.com/shreyapalavalli/swift-mailbox-monitor.git
+cd swift-mailbox-monitor
+git checkout dev-backend-vishnu            # the backend lives here (PR #1)
+git checkout -b dev-frontend               # your work goes on its own branch
 
-# Terminal 2: frontend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt            # backend dependencies (needed to run the API locally)
+```
+
+- Put the frontend in a top-level **`frontend/`** folder (layout in §8), with its own `frontend/requirements.txt` (`flask`). Don't change files outside `frontend/` without telling the backend owner.
+- Open your PR from `dev-frontend` into **`dev-backend-vishnu`** while PR #1 is still open. Once PR #1 is merged, retarget it to `master`.
+- Never commit `.env`, `data/`, `.token_cache.json` or `.github_token`. They're already in `.gitignore`.
+
+### 3.2 Getting a backend to develop against
+
+You need the FastAPI backend running with data in it. There are three ways, so pick one:
+
+| Option | Needs | Use it for |
+|---|---|---|
+| **A. Offline with seed data** (recommended) | Nothing: no mailbox, no Microsoft sign-in, no Gmail | Building every screen, including real-time behaviour |
+| **B. Your teammate's running backend** | Same Wi-Fi network; the backend owner starts the API on the network | Seeing real mailbox data without credentials |
+| **C. Full setup with the real mailbox** | The mailbox password and a Gmail App Password from the backend owner | Final end-to-end testing and the demo |
+
+#### Option A: offline with seed data
+
+`scripts/seed_demo_data.py` runs realistic synthetic SWIFTs (every kind, including OCR noise) through the **real** backend pipeline: parser, classifier, rules and processor. It writes the results to a separate SQLite file. Only the mailbox is replaced by an in-memory stand-in, so nothing touches the network.
+
+1. Create `.env` in the repo root. The client ID is a placeholder; it's never used offline.
+   ```dotenv
+   GRAPH_TENANT_ID=consumers
+   GRAPH_CLIENT_ID=offline-placeholder
+   SWIFT_MAILBOX=me
+   DATABASE_PATH=data/demo.db
+   POLLER_ENABLED=false
+   FRONTEND_ORIGIN=http://localhost:5001
+   ```
+2. Seed and start the backend:
+   ```bash
+   python -m scripts.seed_demo_data --reset               # ~40 SWIFTs + 3 non-SWIFT emails into data/demo.db
+   uvicorn app.main:app --port 8000                       # terminal 1: the API
+   python -m scripts.seed_demo_data --live --count 1      # terminal 2 (optional): +1 new SWIFT every 8 s
+   ```
+3. Start the frontend (§3.3) and open `http://localhost:5001`.
+
+The seed gives you every state the UI has to render:
+- PRIORITY amendments, ACTION_REQUIRED items (camt.056, ABA, weak cancellations), RESPONDED callbacks
+- IN_PROGRESS and RESOLVED items, which the script applies as if an analyst had worked them
+- AUTO_CLOSED, ROUTED_CST and IGNORED rows in the activity log
+- **one FAILED row**, so you can build the failure display
+
+`--live` keeps adding messages, so delta polling, flashing rows and alert toasts can all be built and tested offline. Run `--live --count 1` in a loop while you work on §5.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--db` | `data/demo.db` | SQLite file to fill. It refuses a database that holds real mailbox rows unless `--force`. |
+| `--count` | `40` | SWIFTs in the initial batch (every kind at least once). |
+| `--reset` | off | Delete the database file first. |
+| `--live` / `--interval` / `--live-count` | off / `8` / forever | Keep adding one SWIFT every N seconds. |
+| `--seed` | `7` | Random seed. The same seed gives the same data. |
+
+What's different offline, and expected:
+- `GET /api/graph/test-user` returns **500**, so the connection pill shows "not connected" (§4.8).
+- `POST /api/process/run` returns **401** (§4.6).
+- `/api/graph/messages/{id}` has no original email to show (§4.7).
+
+Make sure those error states look right. The real-mailbox versions only need checking once, with option B or C.
+
+#### Option B: your teammate's running backend
+
+The backend owner starts the API listening on the network instead of localhost only:
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+They then share their machine's local IP (macOS: System Settings → Wi-Fi → Details), and you set `SWIFT_API_BASE=http://<their-ip>:8000` for your Flask app.
+
+- **CORS still works unchanged:** your browser loads the dashboard from *your* `http://localhost:5001`, which matches the backend's `FRONTEND_ORIGIN`.
+- **No authentication:** the API has none, and `/api/graph/messages` returns full email bodies. Only do this on a trusted network, and stop it afterwards. macOS may ask the backend owner to allow incoming connections.
+- **Status changes are real:** PATCH changes the shared data, so coordinate before marking things resolved.
+
+#### Option C: full setup with the real mailbox
+
+Follow the backend [README.md](README.md). The backend owner gives you three things: the real `GRAPH_CLIENT_ID`, the MTheadsYI@outlook.com sign-in for `python -m app.cli login`, and a Gmail App Password for the generator.
+
+Set these in `.env` (in addition to the README's required keys):
+```dotenv
+POLL_INTERVAL_SECONDS=10
+FRONTEND_ORIGIN=http://localhost:5001
+```
+
+- **Fast demo pacing:** `POLL_INTERVAL_SECONDS=10` makes new emails show up within about 10 s.
+- **Sending test emails:**
+  - `python -m scripts.generate_swifts --count 10 --interval 15` sends realistic SWIFTs of every kind.
+  - `--kinds amendment,camt056` targets specific flows.
+  - `--scenario demo` sends one SWIFT per scenario in a fixed order (amendment, SGU, MT192, camt.056, FT callback, ABA), waiting for Enter between steps. **This is the sequence shown to the judges**, so make sure each step is clearly visible on the dashboard.
+- **Safe test mode:** `ACTIONS_ENABLED=false` classifies and stores without touching the mailbox. The activity feed then shows outcome `DRY_RUN`.
+
+### 3.3 Running the frontend, and things that apply to every option
+
+```bash
 cd frontend && flask --app app run --port 5001
 ```
 
-- **Don't use port 5000 on macOS.** AirPlay Receiver (Control Center) already listens on it. Use 5001, and set `FRONTEND_ORIGIN` on the backend to match exactly.
-- **CORS origin must match exactly.** `http://localhost:5001` and `http://127.0.0.1:5001` are different origins. Open the dashboard with the same host you put in `FRONTEND_ORIGIN`, or the browser blocks the API calls.
-- **Make the API base URL configurable** in the frontend, for example `API_BASE = os.environ.get("SWIFT_API_BASE", "http://localhost:8000")`, and inject it into templates.
-- **Safe test mode:** start the backend with `ACTIONS_ENABLED=false` to classify and store without touching the mailbox. Rows still appear in the API, and the activity feed shows outcome `DRY_RUN`.
-- **Generating test traffic:** `python -m scripts.generate_swifts --count 10 --interval 15` emails realistic SWIFTs of every kind (amendments, camt.056, callbacks, SGU…) into the mailbox. It needs `GMAIL_APP_PASSWORD` in `.env`. Use `--kinds amendment,camt056` to target one flow, for example to test the alert toast. `--scenario demo` sends one SWIFT per scenario in a fixed order (amendment, SGU, MT192, camt.056, FT callback, ABA), waiting for Enter between steps. That's the sequence used to demo to the judges, so make sure each step is clearly visible on the dashboard.
+- **Don't use port 5000 on macOS.** AirPlay Receiver (Control Center) already listens on it. Use 5001, and keep `FRONTEND_ORIGIN` in the backend's `.env` matching exactly.
+- **CORS origin must match exactly.** `http://localhost:5001` and `http://127.0.0.1:5001` are different origins. Open the dashboard with the same host as `FRONTEND_ORIGIN`, or the browser blocks the API calls.
+- **Make the API base URL configurable,** for example `API_BASE = os.environ.get("SWIFT_API_BASE", "http://localhost:8000")`, and inject it into templates (§8).
 - **Interactive API docs:** `http://localhost:8000/docs` lists every endpoint with a "Try it out" button.
 
 ---
@@ -76,7 +171,7 @@ All timestamps are **UTC ISO-8601** strings, for example `2026-10-07T09:00:42.16
 
 ### 4.1 `GET /api/swifts`: the work queue
 
-These are SWIFTs that need, or needed, a human, **one row per payment reference**. If a later message arrives with the same reference, it updates that row: the latest message wins, `created_at` is kept and `updated_at` moves.
+These are SWIFTs that need, or needed, a human, **one row per payment reference**. If a later message arrives with the same reference, it updates that row: the latest message wins, `created_at` is kept and `updated_at` moves. For example, every MT298 CLS schedule of the same day shares the reference `RPIS<yyyymmdd>`, so they show as one row. The activity log (§4.6) still has one line per email.
 
 | Query param | Type | Default | Notes |
 |---|---|---|---|
@@ -235,7 +330,7 @@ Content-Type: application/json
 | 401 `{"detail":"Microsoft sign-in required. Visit /auth/login first."}` | Show the sign-in banner (§4.8). |
 | 500 | Generic error toast. |
 
-The button is optional: the poller runs every 30 s anyway. A full pass can take a few seconds, so show a spinner.
+The button is optional: the poller runs every `POLL_INTERVAL_SECONDS` anyway. A full pass can take a few seconds, so show a spinner.
 
 ### 4.7 Original email (optional detail tab)
 
@@ -530,7 +625,7 @@ FastAPI errors are JSON `{"detail": "<message>"}`, or for 422 `{"detail": [ {loc
 
 Test against the backend with the generator's demo scenario (`python -m scripts.generate_swifts --scenario demo`, with the backend on `POLL_INTERVAL_SECONDS=10`). Done means:
 
-- [ ] A generated **amendment** produces a toast and alert chip within about 35 s of the email arriving (≤ 30 s poller + ≤ 5 s UI poll). The detail shows reference, related reference, amount, BICs and the "SHOULD READ" narrative.
+- [ ] A generated **amendment** produces a toast and alert chip within about 15 s of the email arriving with `POLL_INTERVAL_SECONDS=10` (≤ 10 s poller + ≤ 5 s UI poll). The detail shows reference, related reference, amount, BICs and the "SHOULD READ" narrative.
 - [ ] A **camt.056** appears in the queue as HIGH / ACTION_REQUIRED, and the email stays unread.
 - [ ] An **SGU** message shows in the activity feed as ROUTED_CST and is **not** in the queue. The "Routed to CST" tile increments.
 - [ ] A non-camt.056 **cancellation** shows as AUTO_CLOSED in the feed only.
