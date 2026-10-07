@@ -1,0 +1,6 @@
+{
+  "subject": "SWIFT Incoming MX message-08/09/26-02.44.42MpBroadcastEMX-1894-000001",
+  "sender": "vishnuprakash156@gmail.com",
+  "received_date_time": "2026-09-08T06:43:03Z",
+  "body": "SSAAPROD@appcet604.us.world.socgenTo OPS USER A GbtoMarGpm; OPS USER B GbtoMarGpm; FUNDS-Transfer-Us-Swift/us/socgen--- Instance Type and TransmissionPriorityOriginal received from SWIFTNet: NormalMessage Output Reference: 0243 260908sogeus33_finplus001172004603929Message HeaderMX Output: camt.058.001.08 CBPRPlus-camt.058.001.08_NotificationToReceiveCancellationAdviceRequestor DN: ou=hcm,o=sogefrpp,o=swiftResponder DN: ou=xxx,o=sogeus33,0=swiftService Name: swift.finplusSWIFT Reference: swi04003-2026-09-08T06:43:03.23847.2373755ZSWIFT Request Reference: SNL33027-2026-09-08T06:43:03.34416.297748ZCBT Reference: 80a183d4-ab50-41f1-9065-71c06d731d61Store-and-forward Input Time: 0402:2026-09-08T06:43:03Primary Format : MXSecondary Format: SwiftTranslation Result: Translated with more field(s) available (Partial)Translation Result Details: TranslationInfo version 1.0.0.1"
+}

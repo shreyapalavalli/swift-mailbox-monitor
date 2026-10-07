@@ -1,0 +1,6 @@
+{
+  "subject": "SWIFT Incoming Funds Transfer message-07/09/26-09.35.01MpGPSMail-5478-000002",
+  "sender": "vishnuprakash156@gmail.com",
+  "received_date_time": "2026-10-07T07:13:05Z",
+  "body": "07/09/26-09:35:01\r\n\r\nMpGPSMai1-5478-000002\r\n\r\n2\r\n\r\nInstance Type and Transmission\r\n\r\nCopy received from SWIFT\r\n\r\n: Normal\r\n\r\nPriority\r\n\r\nMessage Output Reference: 0934 26090750GEUS33AXXX2658050432\r\n\r\nCorrespondent Input Reference: 1534 26090750GEFRPPPXXX3283879426\r\n\r\nMessage Header\r\n\r\nSwift Output: FIN 199 Free Format Message\r\n\r\nSender : SOGEFRPPXXX\r\n\r\nSOCIETE GENERALE\r\n\r\nPUTEAUX FR\r\n\r\nReceiver: SOGEUS33XXX\r\n\r\nSOCIETE GENERALE NEW YORK, NY US\r\n\r\nMUR COB250T6F0193\r\n\r\nTransaction Manager/Contingency Processing: Not applicable\r\n\r\nMessage Text\r\n\r\n20: Transaction Reference Number\r\n\r\n0435825000432026\r\n\r\n21: Related Reference\r\n\r\n043586750036171H\r\n\r\n79: Narrative\r\n\r\nHI, WE REFER TO OUR PAYMΕΝΤ 043586750036171H\r\n\r\nREMITTER:: SAMPLE LPG FRANCE\r\n\r\nFR7600000000000000000000000\r\n\r\nBENEFICIARY: LV00BANK0000000000000\r\n\r\nSAMPLE TRADING LTD / RIKOLV2XXXX\r\n\r\nCAN YOU RETURN THE FUNDS AT THE PAYER'S REQUEST?\r\n\r\nBEST REGARDS\r\n\r\nCDS STD FLUX 1 LC\r\n\r\n{CHK:18545899CAE3}\r\n\r\nMessage Trailer\r\n\r\nPKI Signature: MAC-Equivalent\r\n"
+}
