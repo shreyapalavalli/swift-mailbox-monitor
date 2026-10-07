@@ -2,8 +2,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from app.config.settings import settings
-from app.graph.mail_service import GraphMailService
+from app.dependencies import mail_service
 from app.models.email_message import EmailMessage
 
 
@@ -16,8 +15,6 @@ auth_router = APIRouter(
     prefix="/auth",
     tags=["Authentication"]
 )
-
-mail_service = GraphMailService()
 
 
 def _graph_http_exception(exc: httpx.HTTPStatusError) -> HTTPException:

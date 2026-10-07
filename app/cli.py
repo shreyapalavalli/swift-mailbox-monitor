@@ -1,4 +1,6 @@
 import argparse
+import asyncio
+import json
 import sys
 
 from app.graph.auth_service import GraphAuthService
@@ -11,11 +13,15 @@ def _login() -> int:
 
 
 def _run_once() -> int:
-    print(
-        "run-once is not available yet (the processor is not implemented).",
-        file=sys.stderr,
-    )
-    return 1
+    from app.dependencies import processor
+
+    try:
+        summary = asyncio.run(processor.run_once())
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(json.dumps(summary, indent=2))
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
