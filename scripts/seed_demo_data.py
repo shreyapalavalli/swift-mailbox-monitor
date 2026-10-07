@@ -69,7 +69,7 @@ def _parse_args(argv):
     parser.add_argument("--live", action="store_true", help="keep adding one new SWIFT every --interval seconds")
     parser.add_argument("--interval", type=float, default=8, help="seconds between --live messages (default 8)")
     parser.add_argument("--live-count", type=int, default=None, help="stop --live after N messages")
-    parser.add_argument("--seed", type=int, default=7, help="random seed for repeatable data (default 7)")
+    parser.add_argument("--seed", type=int, default=7, help="random seed for repeatable messages; timestamps follow the clock (default 7)")
     return parser.parse_args(argv)
 
 
