@@ -147,3 +147,45 @@ def test_error_is_logged_without_headers_or_print(caplog, capsys):
     assert "secret-ish" not in msg and "www-authenticate" not in msg.lower()
     out = capsys.readouterr()
     assert out.out == "" and out.err == ""
+
+
+_ACCOUNT_CACHE = {
+    "Account": {
+        "uid.utid-login.windows.net-consumers": {
+            "home_account_id": "uid.utid",
+            "environment": "login.windows.net",
+            "realm": "consumers",
+            "local_account_id": "uid",
+            "username": "me@outlook.com",
+            "authority_type": "MSSTS",
+        }
+    }
+}
+
+
+def test_running_service_picks_up_sign_in_from_another_process(tmp_path):
+    path = tmp_path / "cache.json"
+    server = GraphAuthService(cache_path=str(path))          # started before anyone signed in
+    assert server.is_authenticated is False
+
+    path.write_text(json.dumps(_ACCOUNT_CACHE))               # `python -m app.cli login` in another process
+    seen = {}
+
+    def silent(scopes, account):
+        seen["account"] = account
+        return {"access_token": "fresh", "expires_in": 3600}
+
+    server._app.acquire_token_silent = silent
+    assert asyncio.run(server.get_access_token()) == "fresh"
+    assert seen["account"]["username"] == "me@outlook.com"
+    assert server.is_authenticated is True
+
+
+def test_still_signed_out_when_cache_has_no_account(tmp_path):
+    from app.graph.auth_service import SignInRequiredError
+
+    path = tmp_path / "cache.json"
+    server = GraphAuthService(cache_path=str(path))
+    path.write_text(json.dumps({"AccessToken": {}}))
+    with pytest.raises(SignInRequiredError):
+        asyncio.run(server.get_access_token())

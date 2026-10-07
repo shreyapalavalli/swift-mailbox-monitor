@@ -39,6 +39,14 @@ class GraphAuthService:
         self._access_token: str | None = None
         self._expires_at: datetime | None = None
 
+    def _reload_account(self) -> None:
+        """Pick up a sign-in written to the cache file by another process (e.g. the CLI)."""
+        if not self._cache_path.exists():
+            return
+        self._cache.deserialize(self._cache_path.read_text(encoding="utf-8"))
+        accounts = self._app.get_accounts()
+        self._account = accounts[0] if accounts else None
+
     def _save_cache(self) -> None:
         if not self._cache.has_state_changed:
             return
@@ -171,6 +179,9 @@ class GraphAuthService:
         """
         Return a delegated access token for the signed-in Microsoft user.
         """
+        if self._account is None:
+            self._reload_account()
+
         if self._account:
             result = self._app.acquire_token_silent(
                 scopes=settings.graph_scope_list,
