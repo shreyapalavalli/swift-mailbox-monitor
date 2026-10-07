@@ -141,3 +141,20 @@ def test_camt058_becomes_analyst_when_configured(load_fixture):
     parsed = parse_swift(**subject_body(load_fixture("mx_camt058_cancellation_notice")))
     d = decide(parsed, classify(parsed), ["camt.056", "camt.058"])
     assert d.action is Action.STORE_FOR_ANALYST
+
+
+def test_sgu_beats_amendment():
+    parsed = from_narrative("RE SGU260903-000033. PLEASE AMEND FIELD 59 TO READ ACME LTD")
+    c = classify(parsed)
+    assert c.category is Category.AMENDMENT
+    d = decide(parsed, c, ACTION_MX)
+    check(d, Action.FORWARD_TO_CST, "CST", "ROUTED_CST", "NORMAL")
+
+
+def test_sgu_beats_callback_with_ft_reference():
+    parsed = from_narrative("RE SGU260903-000033. PLS CALL BACK TO CONFIRM FT26090811223")
+    c = classify(parsed)
+    assert c.category is Category.CALLBACK
+    assert any(r.upper().startswith("FT") for r in parsed.references)
+    d = decide(parsed, c, ACTION_MX)
+    check(d, Action.FORWARD_TO_CST, "CST", "ROUTED_CST", "NORMAL")
