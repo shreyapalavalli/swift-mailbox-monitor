@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block title %}Detail · SWIFT Monitor{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="detail-header">
+        <div>
+            <div id="detail-reference" class="detail-title">Loading…</div>
+            <div id="detail-meta" class="muted"></div>
+        </div>
+        <div class="detail-actions">
+            <button id="detail-start-btn" class="btn btn-secondary" type="button">Start</button>
+            <button id="detail-resolve-btn" class="btn btn-primary" type="button">Resolve</button>
+        </div>
+    </div>
+</section>
+
+<section id="detail-content" class="detail-grid"></section>
+
+<script>
+    document.body.dataset.page = 'detail';
+    window.swiftMonitorDetailReference = {{ reference | tojson }};
+</script>
+{% endblock %}

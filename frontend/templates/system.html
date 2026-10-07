@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+
+{% block title %}System · SWIFT Monitor{% endblock %}
+
+{% block content %}
+<section class="panel system-panel">
+    <h2>System status</h2>
+    <div id="system-status-card" class="status-card"></div>
+</section>
+
+<section class="panel">
+    <h2>Recent processing</h2>
+    <div id="system-log-list" class="system-log"></div>
+</section>
+
+<script>
+    document.body.dataset.page = 'system';
+</script>
+{% endblock %}
