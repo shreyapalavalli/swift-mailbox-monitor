@@ -9,3 +9,4 @@ venv/
 .DS_Store
 .token_cache.json
 data/
+.github_token
