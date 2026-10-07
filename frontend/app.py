@@ -3,7 +3,7 @@ import os
 from flask import Flask, render_template
 
 app = Flask(__name__)
-API_BASE = os.environ.get("SWIFT_API_BASE", "http://localhost:8000")
+API_BASE = os.environ.get("SWIFT_API_BASE", "http://localhost:8001")
 
 
 @app.context_processor
