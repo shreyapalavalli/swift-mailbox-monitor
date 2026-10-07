@@ -1,6 +1,7 @@
 """Orchestrates fetch -> parse -> classify -> decide -> act, exactly once per Graph message."""
 import asyncio
 import json
+import logging
 from typing import Protocol
 
 import httpx
@@ -11,6 +12,8 @@ from app.models.email_message import EmailMessage
 from app.swift.classifier import Classification, classify
 from app.swift.parser import ParsedSwift, parse_swift
 from app.swift.rules import Action, Decision, decide
+
+logger = logging.getLogger("swift.processor")
 
 FORWARD_COMMENT = "Auto-routed by SWIFT Mailbox Monitor: reference {ref} belongs to the CST team."
 REPLY_TEXT = (
@@ -108,6 +111,8 @@ class SwiftProcessor:
             row.update(outcome="FAILED" if error else "DONE",
                        completed_steps=",".join(ordered), error=error)
             self.repo.record_processed(row)
+            logger.info("%s ref=%s category=%s action=%s outcome=%s", msg.id[-12:], row["reference"],
+                        row["category"], row["action"], row["outcome"])
             return row
 
         try:

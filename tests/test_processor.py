@@ -369,3 +369,27 @@ def test_mark_read_timeout_after_reply_keeps_responded_row(setup):
     row = repo.get_processed("id-cb")
     assert (row["outcome"], row["completed_steps"]) == ("DONE", "REPLIED,STORED,MARKED_READ")
     assert len(fake.replies) == 1 and fake.marked_read == ["id-cb"]
+
+
+def test_logs_one_info_line_per_processed_message(setup, fixture_inbox, caplog):
+    import logging
+
+    fake, repo, proc = setup(fixture_inbox)
+    with caplog.at_level(logging.INFO, logger="swift.processor"):
+        asyncio.run(proc.run_once())
+    lines = [r.getMessage() for r in caplog.records if r.name == "swift.processor" and r.levelno == logging.INFO]
+    assert len(lines) == 4
+    assert "id-sgu ref=WFW260907-001017 category=CST action=FORWARD_TO_CST outcome=DONE" in lines
+    assert any(line.startswith("id-nonswift ref=None category=NOT_SWIFT action=IGNORE outcome=DONE")
+               for line in lines)
+
+
+def test_log_line_shortens_graph_id_to_last_12_chars(setup, load_fixture, caplog):
+    import logging
+
+    long_id = "AAMkAGI2TG93AAA=" * 4
+    fake, repo, proc = setup([_from_fixture(load_fixture, long_id, "mt298_cls_schedule")])
+    with caplog.at_level(logging.INFO, logger="swift.processor"):
+        asyncio.run(proc.run_once())
+    (line,) = [r.getMessage() for r in caplog.records if r.name == "swift.processor"]
+    assert line.startswith(long_id[-12:] + " ref=RPIS20260908 category=OTHER action=STORE_FOR_ANALYST")

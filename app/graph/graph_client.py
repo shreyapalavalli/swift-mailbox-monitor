@@ -1,8 +1,12 @@
-import httpx
+import logging
 from urllib.parse import quote
+
+import httpx
 
 from app.config.settings import settings
 from app.graph.auth_service import GraphAuthService
+
+logger = logging.getLogger("swift.graph")
 
 
 class GraphClient:
@@ -18,16 +22,8 @@ class GraphClient:
     @staticmethod
     def _raise_for_status(response: httpx.Response) -> None:
         if response.status_code >= 400:
-            print("\n========== GRAPH API ERROR ==========")
-            print("Status:", response.status_code)
-            print("URL:", response.url)
-            print("Response:", response.text)
-            print("Response headers:", dict(response.headers))
-            print(
-                "WWW-Authenticate:",
-                response.headers.get("www-authenticate")
-            )
-            print("=====================================\n")
+            logger.warning("Graph API error %s %s: %s", response.status_code,
+                           response.url, response.text[:500])
 
         response.raise_for_status()
 

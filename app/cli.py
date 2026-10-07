@@ -4,6 +4,7 @@ import json
 import sys
 
 from app.graph.auth_service import GraphAuthService, SignInRequiredError
+from app.logging_config import configure_logging
 
 
 def _login() -> int:
@@ -25,6 +26,7 @@ def _run_once() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    configure_logging()
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("login", help="Sign in with the device-code flow")

@@ -126,3 +126,24 @@ def test_logout_clears_persisted_cache(tmp_path):
     service.logout()
     assert service.is_authenticated is False
     assert GraphAuthService(cache_path=str(path)).is_authenticated is False
+
+
+def test_error_is_logged_without_headers_or_print(caplog, capsys):
+    import logging
+
+    body = "x" * 2000
+    client = GraphClient(
+        auth_service=FakeAuth(),
+        transport=httpx.MockTransport(
+            lambda r: httpx.Response(400, text=body, headers={"www-authenticate": "Bearer secret-ish"})),
+    )
+    with caplog.at_level(logging.WARNING, logger="swift.graph"), pytest.raises(httpx.HTTPStatusError):
+        asyncio.run(client.get("https://graph.test/x"))
+    (record,) = [r for r in caplog.records if r.name == "swift.graph"]
+    msg = record.getMessage()
+    assert record.levelno == logging.WARNING
+    assert "400" in msg and "https://graph.test/x" in msg
+    assert "x" * 500 in msg and "x" * 501 not in msg
+    assert "secret-ish" not in msg and "www-authenticate" not in msg.lower()
+    out = capsys.readouterr()
+    assert out.out == "" and out.err == ""

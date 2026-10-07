@@ -8,7 +8,10 @@ from app.api.mail_routes import auth_router, router as mail_router
 from app.api.swift_routes import process_router, router as swift_router
 from app.config.settings import settings
 from app.dependencies import processor
+from app.logging_config import configure_logging
 from app.services.poller import run_poller
+
+configure_logging()
 
 
 @asynccontextmanager
