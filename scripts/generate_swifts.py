@@ -20,6 +20,7 @@ from scripts.swift_samples import KINDS, make_sample
 SMTP_HOST, SMTP_PORT = "smtp.gmail.com", 587
 DEFAULT_SENDER = "vishnuprakash156@gmail.com"
 DEFAULT_RECIPIENT = "MTheadsYI@outlook.com"
+MAX_BACKOFF_SECONDS = 300
 
 # Percent weights: cancellation 30, sgu 25, amendment 15, callback 15, other 15.
 KIND_WEIGHTS = {
@@ -29,10 +30,26 @@ KIND_WEIGHTS = {
 }
 
 
+def _non_negative_float(value: str) -> float:
+    number = float(value)
+    if number < 0:
+        raise argparse.ArgumentTypeError(f"must be >= 0, got {value}")
+    return number
+
+
+def _positive_int(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"must be >= 1, got {value}")
+    return number
+
+
 def _parse_args(argv):
     parser = argparse.ArgumentParser(prog="python -m scripts.generate_swifts", description=__doc__.splitlines()[0])
-    parser.add_argument("--interval", type=float, default=60, help="seconds between messages (default 60)")
-    parser.add_argument("--count", type=int, default=None, help="stop after N messages (default: run forever)")
+    parser.add_argument("--interval", type=_non_negative_float, default=60,
+                        help="seconds between messages (default 60)")
+    parser.add_argument("--count", type=_positive_int, default=None,
+                        help="stop after N messages (default: run forever)")
     parser.add_argument("--kinds", default=None, help=f"comma-separated subset of: {', '.join(KINDS)}")
     parser.add_argument("--dry-run", action="store_true", help="print messages instead of sending them")
     return parser.parse_args(argv)
@@ -73,25 +90,37 @@ def main(argv=None) -> int:
     rng = random.Random()
     weights = [KIND_WEIGHTS[k] for k in kinds]
     sent = 0
+    failures = 0  # consecutive transient send failures
     try:
         while args.count is None or sent < args.count:
-            if sent:
+            if sent and not failures:
                 time.sleep(args.interval)
             kind = rng.choices(kinds, weights)[0]
             subject, body = make_sample(kind, rng, datetime.now())
             msg = _build_message(sender, recipient, subject, body)
             if args.dry_run:
                 print(f"--- [dry-run] {kind} ---\nFrom: {sender}\nTo: {recipient}\nSubject: {subject}\n\n{body}\n")
-            else:
+                sent += 1
+                continue
+            try:
                 _send(msg, sender, password)
-                print(f"sent {kind}: {subject}", flush=True)
+            except smtplib.SMTPAuthenticationError:
+                print("error: Gmail rejected the login. Check GMAIL_APP_PASSWORD and GENERATOR_SENDER.",
+                      file=sys.stderr)
+                return 2
+            except (smtplib.SMTPException, OSError) as exc:
+                failures += 1
+                delay = min(MAX_BACKOFF_SECONDS, 2 ** failures)
+                print(f"error: send failed ({type(exc).__name__}: {str(exc)[:200]}); "
+                      f"retrying in {delay} s", file=sys.stderr, flush=True)
+                time.sleep(delay)
+                continue
+            failures = 0
+            print(f"sent {kind}: {subject}", flush=True)
             sent += 1
     except KeyboardInterrupt:
         print(f"\nStopped after {sent} message(s).")
         return 0
-    except (smtplib.SMTPException, OSError) as exc:
-        print(f"error: sending failed after {sent} message(s): {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 1
     return 0
 
 

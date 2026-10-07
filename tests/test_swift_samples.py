@@ -1,4 +1,5 @@
 import random
+import smtplib
 import re
 from datetime import datetime
 
@@ -185,3 +186,60 @@ def test_ctrl_c_exits_cleanly(cli_env, capsys):
     cli_env.setattr(generate_swifts.time, "sleep", interrupt)
     assert generate_swifts.main(["--dry-run", "--interval", "1"]) == 0
     assert "Stopped" in capsys.readouterr().out
+
+
+class FlakySMTP(FakeSMTP):
+    """Fails send_message for the first `failures` attempts (class-wide), then succeeds."""
+    failures = 0
+    error: Exception = smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+
+    def send_message(self, msg):
+        if FlakySMTP.failures:
+            FlakySMTP.failures -= 1
+            raise FlakySMTP.error
+        super().send_message(msg)
+
+
+def test_transient_error_backs_off_and_retries(cli_env, capsys):
+    sleeps = []
+    cli_env.setattr(generate_swifts.time, "sleep", sleeps.append)
+    cli_env.setenv("GMAIL_APP_PASSWORD", "s3cret-app-pw")
+    FlakySMTP.failures, FlakySMTP.error = 1, smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+    cli_env.setattr(generate_swifts.smtplib, "SMTP", FlakySMTP)
+    assert generate_swifts.main(["--count", "1", "--interval", "0", "--kinds", "amendment"]) == 0
+    assert len(FakeSMTP.instances) == 2                       # 2 attempts
+    assert sum(len(s.sent) for s in FakeSMTP.instances) == 1
+    assert sleeps == [2]                                      # min(300, 2**1)
+    captured = capsys.readouterr()
+    assert "SMTPServerDisconnected" in captured.err and "s3cret-app-pw" not in captured.out + captured.err
+
+
+def test_backoff_doubles_caps_at_300_and_resets_after_success(cli_env):
+    sleeps = []
+    cli_env.setattr(generate_swifts.time, "sleep", sleeps.append)
+    cli_env.setenv("GMAIL_APP_PASSWORD", "pw")
+    FlakySMTP.failures, FlakySMTP.error = 9, OSError("network down")
+    cli_env.setattr(generate_swifts.smtplib, "SMTP", FlakySMTP)
+    assert generate_swifts.main(["--count", "2", "--interval", "7", "--kinds", "amendment"]) == 0
+    assert sleeps == [2, 4, 8, 16, 32, 64, 128, 256, 300, 7]  # then interval; counter reset on success
+
+
+def test_auth_error_exits_2_immediately(cli_env, capsys):
+    sleeps = []
+    cli_env.setattr(generate_swifts.time, "sleep", sleeps.append)
+    cli_env.setenv("GMAIL_APP_PASSWORD", "s3cret-app-pw")
+    FlakySMTP.failures, FlakySMTP.error = 5, smtplib.SMTPAuthenticationError(535, b"Username and Password not accepted")
+    cli_env.setattr(generate_swifts.smtplib, "SMTP", FlakySMTP)
+    assert generate_swifts.main(["--count", "3", "--interval", "0"]) == 2
+    assert len(FakeSMTP.instances) == 1 and sleeps == []
+    captured = capsys.readouterr()
+    assert "GMAIL_APP_PASSWORD" in captured.err and "s3cret-app-pw" not in captured.out + captured.err
+
+
+@pytest.mark.parametrize("argv", [["--interval", "-1", "--count", "1"], ["--count", "0"], ["--count", "-3"]])
+def test_invalid_interval_or_count_is_an_argparse_error(cli_env, capsys, argv):
+    cli_env.setattr(generate_swifts.smtplib, "SMTP", _no_smtp)
+    with pytest.raises(SystemExit) as exc:
+        generate_swifts.main(["--dry-run", *argv])
+    assert exc.value.code == 2
+    assert "error:" in capsys.readouterr().err

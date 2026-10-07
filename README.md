@@ -138,10 +138,12 @@ python -m scripts.generate_swifts --kinds amendment,sgu_reply --count 4
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--interval` | `60` | Seconds between messages. |
-| `--count` | run forever | Stop after N messages. |
+| `--interval` | `60` | Seconds between messages (must be >= 0). |
+| `--count` | run forever | Stop after N messages (must be >= 1). |
 | `--kinds` | all | Comma-separated subset of `cancellation_mt192`, `cancellation_return_mt199`, `camt056`, `camt058`, `amendment`, `callback_ft`, `callback_inv`, `aba_request`, `sgu_reply`, `cls_mt298`. |
 | `--dry-run` | off | Print instead of sending. |
+
+A transient SMTP or network error does not stop the generator: it prints the error, waits 2, 4, 8, ... seconds (at most 300) and keeps going; the wait resets after a successful send. A rejected Gmail login exits immediately with status 2.
 
 Test mail from Gmail can land in Junk, which is why `junkemail` is polled by default.
 
