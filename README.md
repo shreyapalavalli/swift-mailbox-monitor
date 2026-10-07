@@ -31,7 +31,7 @@ Note: camt.058 cancellations are auto-closed under the default `CANCELLATION_ACT
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+source .venv/bin/activate        # Windows PowerShell: .venv\Scripts\Activate.ps1 (see frontend-plan.md §3.4)
 pip install -r requirements.txt
 # then create .env with the keys below
 ```

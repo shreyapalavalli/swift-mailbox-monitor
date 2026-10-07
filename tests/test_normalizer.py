@@ -24,6 +24,6 @@ def test_letter_o_outside_amount_untouched():
 
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)
 def test_fixture_bodies_are_clean(path):
-    out = normalize_text(json.loads(path.read_text())["body"])
+    out = normalize_text(json.loads(path.read_text(encoding="utf-8"))["body"])
     assert "\r" not in out
     assert not re.search(r"[\u0370-\u03ff\u0400-\u04ff]", out)

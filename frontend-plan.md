@@ -61,8 +61,15 @@ cd swift-mailbox-monitor
 git checkout dev-backend-vishnu            # the backend lives here (PR #1)
 git checkout -b dev-frontend               # your work goes on its own branch
 
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate     # macOS / Linux
 pip install -r requirements.txt            # backend dependencies (needed to run the API locally)
+```
+
+On **Windows (PowerShell)**, create and activate the venv like this instead (more in §3.4):
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
 
 - Put the frontend in a top-level **`frontend/`** folder (layout in §8), with its own `frontend/requirements.txt` (`flask`). Don't change files outside `frontend/` without telling the backend owner.
@@ -162,6 +169,26 @@ cd frontend && flask --app app run --port 5001
 - **CORS origin must match exactly.** `http://localhost:5001` and `http://127.0.0.1:5001` are different origins. Open the dashboard with the same host as `FRONTEND_ORIGIN`, or the browser blocks the API calls.
 - **Make the API base URL configurable,** for example `API_BASE = os.environ.get("SWIFT_API_BASE", "http://localhost:8000")`, and inject it into templates (§8).
 - **Interactive API docs:** `http://localhost:8000/docs` lists every endpoint with a "Try it out" button.
+
+### 3.4 Developing on Windows
+
+Everything here works on Windows: Flask, the browser JavaScript, the FastAPI backend, SQLite and the seed script. The shell commands in this doc are written for macOS/Linux, though, so use these equivalents in **PowerShell**:
+
+| Task | macOS / Linux (as written above) | Windows PowerShell |
+|---|---|---|
+| Python | `python3` | `python` (or `py -3`). Use Python **3.12+** from python.org, with "Add python.exe to PATH" ticked |
+| Activate venv | `source .venv/bin/activate` | `.venv\Scripts\Activate.ps1`. If scripts are blocked: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` (once) |
+| One-off env vars | `DATABASE_PATH=data/demo.db uvicorn …` | Put them in `.env` (preferred), or `$env:DATABASE_PATH="data/demo.db"; uvicorn …` |
+| Chain commands | `cd frontend && flask …` | Works in PowerShell 7. In Windows PowerShell 5.1 run `cd frontend`, then `flask …` on separate lines |
+| HTTP checks | `curl -s localhost:8000/health` | `curl.exe -s localhost:8000/health` (plain `curl` is PowerShell's `Invoke-WebRequest`), or just use the browser |
+| Follow the log | `tail -f data/backend.log` | `Get-Content data\backend.log -Wait` |
+
+Also on Windows:
+- **Set `PYTHONUTF8=1`** once with `setx PYTHONUTF8 1`, then open a new terminal. SWIFT bodies contain non-ASCII characters (for example the Greek look-alike letters the normalizer repairs), and without UTF-8 mode Python on Windows reads and prints text as cp1252.
+- **Stop the backend before `seed_demo_data --reset`.** Windows can't delete a database file another process has open; the script says so and exits with code 2 if you forget.
+- **Keep the frontend on port 5001.** Port 5000 is usually free on Windows, but 5001 matches `FRONTEND_ORIGIN` in the docs and `.env`.
+- **The test suite runs on Windows** (`pytest`). One test checks Unix file permissions and is skipped there.
+- **If Windows Defender Firewall prompts** when you start `uvicorn` or Flask, "Private networks" is enough. Nothing needs to be reachable from outside your machine for option A.
 
 ---
 

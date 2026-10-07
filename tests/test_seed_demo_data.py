@@ -89,3 +89,26 @@ def test_offline_mailbox_never_touches_the_network(tmp_path, no_sleep, monkeypat
 
     monkeypatch.setattr(httpx.AsyncClient, "send", boom)
     assert seed_demo_data.main(["--db", str(tmp_path / "demo.db"), "--count", "12"]) == 0
+
+
+def test_reset_removes_wal_sidecar_files(tmp_path, no_sleep):
+    db = tmp_path / "demo.db"
+    assert seed_demo_data.main(["--db", str(db), "--count", "10"]) == 0
+    for suffix in ("-wal", "-shm"):
+        (tmp_path / f"demo.db{suffix}").write_bytes(b"stale")
+    assert seed_demo_data.main(["--db", str(db), "--count", "10", "--reset"]) == 0
+    for suffix in ("-wal", "-shm"):
+        sidecar = tmp_path / f"demo.db{suffix}"
+        assert not sidecar.exists() or sidecar.read_bytes() != b"stale"
+
+
+def test_reset_while_database_is_locked_explains_how_to_fix(tmp_path, capsys, no_sleep, monkeypatch):
+    db = tmp_path / "demo.db"
+    assert seed_demo_data.main(["--db", str(db), "--count", "10"]) == 0
+
+    def locked(path):
+        raise PermissionError(32, "The process cannot access the file because it is being used by another process")
+
+    monkeypatch.setattr(seed_demo_data.os, "remove", locked)
+    assert seed_demo_data.main(["--db", str(db), "--reset"]) == 2
+    assert "stop the backend" in capsys.readouterr().err.lower()

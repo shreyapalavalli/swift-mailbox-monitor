@@ -69,6 +69,7 @@ def test_cache_with_no_file_is_signed_out(tmp_path):
     assert GraphAuthService(cache_path=str(tmp_path / "none.json")).is_authenticated is False
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes don't exist on Windows")
 def test_cache_is_saved_with_owner_only_permissions(tmp_path):
     path = tmp_path / "cache.json"
     service = GraphAuthService(cache_path=str(path))
@@ -189,3 +190,14 @@ def test_still_signed_out_when_cache_has_no_account(tmp_path):
     path.write_text(json.dumps({"AccessToken": {}}))
     with pytest.raises(SignInRequiredError):
         asyncio.run(server.get_access_token())
+
+
+def test_cache_save_works_without_fchmod(tmp_path, monkeypatch):
+    """Windows Python before 3.13 has no os.fchmod; saving the cache must still work."""
+    monkeypatch.delattr(os, "fchmod", raising=False)
+    path = tmp_path / "cache.json"
+    service = GraphAuthService(cache_path=str(path))
+    service._cache.deserialize(json.dumps({"AccessToken": {}}))
+    service._cache.has_state_changed = True
+    service._save_cache()
+    assert json.loads(path.read_text(encoding="utf-8")) == {"AccessToken": {}}
