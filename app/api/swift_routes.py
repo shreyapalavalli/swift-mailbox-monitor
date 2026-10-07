@@ -105,6 +105,8 @@ def update_swift(reference: str, body: StatusUpdate,
 
 @process_router.post("/run")
 async def run_process(processor: SwiftProcessor = Depends(get_processor)):
+    if processor.is_running:
+        raise HTTPException(status_code=409, detail="A processing run is already in progress.")
     try:
         return await processor.run_once()
     except SignInRequiredError as exc:

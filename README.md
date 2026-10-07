@@ -90,6 +90,8 @@ Process the mailbox one time without starting the server:
 python -m app.cli run-once   # prints a JSON summary
 ```
 
+Do not run `python -m app.cli run-once` while the server is running. It is a separate process, so the server's run lock cannot see it, and both could forward or reply to the same message.
+
 ## Run
 
 ```bash
@@ -131,7 +133,7 @@ Dashboard (`app/api/swift_routes.py`):
 | GET | `/api/swifts/metrics` | none | Today's counts: `processed_today`, `swift_today`, `by_category_today`, `by_status_today`, `open_action_required`, `open_priority`, `failed_open`, `last_processed_at` |
 | GET | `/api/swifts/{reference}` | none | One action; 404 if unknown |
 | PATCH | `/api/swifts/{reference}` | body `{"status": "IN_PROGRESS" \| "RESOLVED"}` | Updated action; 404 if unknown |
-| POST | `/api/process/run` | none | Runs one processing pass and returns its summary; 401 if not signed in |
+| POST | `/api/process/run` | none | Runs one processing pass and returns its summary; 401 if not signed in; 409 if a run (poller or manual) is already in progress |
 | GET | `/api/process/log` | `limit` (1-1000, default 100) | Recent processed-message log |
 
 Mailbox and auth (`app/api/mail_routes.py`):

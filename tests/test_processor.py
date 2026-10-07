@@ -325,3 +325,31 @@ def test_poison_message_is_recorded_and_others_still_processed(tmp_path, load_fi
     assert summary["failed"] == 1 and summary["processed"] == 3
     assert fake.forwards == [("id-sgu", CST)]
     assert set(fake.marked_read) == {"id-sgu", "id-cancel"}
+
+
+def test_overlapping_runs_forward_once(setup, load_fixture):
+    fake, repo, proc = setup([_from_fixture(load_fixture, "id-sgu", "mt199_sgu_related_ref")])
+    gate = asyncio.Event()
+    entered = asyncio.Event()
+    real_forward = fake.forward_message
+
+    async def slow_forward(message_id, to_address, comment):
+        entered.set()
+        await gate.wait()
+        await real_forward(message_id, to_address, comment)
+
+    fake.forward_message = slow_forward
+
+    async def go():
+        first = asyncio.create_task(proc.run_once())
+        await entered.wait()
+        assert proc.is_running is True
+        second = asyncio.create_task(proc.run_once())
+        await asyncio.sleep(0.01)
+        gate.set()
+        return await asyncio.gather(first, second)
+
+    first, second = asyncio.run(go())
+    assert fake.forwards == [("id-sgu", CST)]
+    assert first["processed"] == 1 and second["skipped"] == 1
+    assert proc.is_running is False

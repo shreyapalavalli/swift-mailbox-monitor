@@ -1,4 +1,5 @@
 """Orchestrates fetch -> parse -> classify -> decide -> act, exactly once per Graph message."""
+import asyncio
 import json
 from typing import Protocol
 
@@ -48,8 +49,18 @@ class SwiftProcessor:
         self.folders = folders
         self.cst_mailbox = cst_mailbox
         self.action_mx_types = action_mx_types
+        self._lock = asyncio.Lock()
+
+    @property
+    def is_running(self) -> bool:
+        return self._lock.locked()
 
     async def run_once(self) -> dict:
+        """Process every unread message once; overlapping calls are serialized by a lock."""
+        async with self._lock:
+            return await self._run_once()
+
+    async def _run_once(self) -> dict:
         summary = {"fetched": 0, "processed": 0, "skipped": 0, "failed": 0, "by_action": {}}
         for folder in self.folders:
             messages = await self.mail.fetch_unread_messages(folder)

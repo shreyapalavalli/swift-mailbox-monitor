@@ -14,6 +14,7 @@ MX_REF = "swi04003-2026-09-08T06:43:03.23847.2373755Z"
 class FakeProcessor:
     def __init__(self, exc=None):
         self.exc = exc
+        self.is_running = False
 
     async def run_once(self):
         if self.exc:
@@ -114,6 +115,13 @@ def test_process_run_unknown_runtime_error_is_500(repo, proc):
     finally:
         app.dependency_overrides.clear()
     assert r.status_code == 500
+
+
+def test_process_run_conflict_while_running(client, proc):
+    proc.is_running = True
+    r = client.post("/api/process/run")
+    assert r.status_code == 409
+    assert r.json() == {"detail": "A processing run is already in progress."}
 
 
 def test_cors_header_for_frontend(client):
