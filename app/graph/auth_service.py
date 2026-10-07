@@ -9,6 +9,10 @@ import msal
 from app.config.settings import settings
 
 
+class SignInRequiredError(RuntimeError):
+    """Raised when no usable Microsoft token exists and the user must sign in."""
+
+
 class GraphAuthService:
     def __init__(self, cache_path: str | None = None):
         self._cache_path = Path(cache_path or settings.token_cache_path)
@@ -186,7 +190,7 @@ class GraphAuthService:
             self._expires_at = None
 
         if not self._access_token:
-            raise RuntimeError(
+            raise SignInRequiredError(
                 "Microsoft sign-in required. Visit /auth/login first."
             )
 

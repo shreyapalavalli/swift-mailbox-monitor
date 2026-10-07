@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from app.db.repository import SwiftRepository
+from app.graph.auth_service import SignInRequiredError
 from app.models.email_message import EmailMessage
 from app.services.processor import SwiftProcessor
 
@@ -177,12 +178,27 @@ def test_auth_error_propagates_without_failed_row(setup, fixture_inbox):
     fake, repo, proc = setup(fixture_inbox)
 
     async def boom(message_id, to_address, comment):
-        raise RuntimeError("Microsoft sign-in required. Visit /auth/login first.")
+        raise SignInRequiredError("Microsoft sign-in required. Visit /auth/login first.")
 
     fake.forward_message = boom
-    with pytest.raises(RuntimeError, match="sign-in required"):
+    with pytest.raises(SignInRequiredError, match="sign-in required"):
         asyncio.run(proc.run_once())
     assert repo.get_processed("id-sgu") is None
+
+
+def test_plain_runtime_error_is_contained_per_message(setup, fixture_inbox):
+    fake, repo, proc = setup(fixture_inbox)
+
+    async def boom(message_id, to_address, comment):
+        raise RuntimeError("unexpected")
+
+    fake.forward_message = boom
+    summary = asyncio.run(proc.run_once())
+    row = repo.get_processed("id-sgu")
+    assert (row["outcome"], row["completed_steps"]) == ("FAILED", "")
+    assert "unexpected" in row["error"]
+    assert summary["failed"] == 1 and summary["processed"] == 4
+    assert "id-cancel" in fake.marked_read
 
 
 def test_polls_every_configured_folder(tmp_path, load_fixture):
@@ -219,7 +235,7 @@ def test_cli_run_once_not_signed_in(monkeypatch, capsys):
     from app.cli import main
 
     monkeypatch.setattr(app.dependencies, "processor", _StubProcessor(
-        RuntimeError("Microsoft sign-in required. Visit /auth/login first.")))
+        SignInRequiredError("Microsoft sign-in required. Visit /auth/login first.")))
     assert main(["run-once"]) == 1
     assert "sign-in required" in capsys.readouterr().err
 
@@ -268,10 +284,10 @@ def test_sign_in_error_after_forward_persists_progress(setup, fixture_inbox):
     real_mark = fake.mark_as_read
 
     async def signed_out(message_id):
-        raise RuntimeError("Microsoft sign-in required. Visit /auth/login first.")
+        raise SignInRequiredError("Microsoft sign-in required. Visit /auth/login first.")
 
     fake.mark_as_read = signed_out
-    with pytest.raises(RuntimeError, match="sign-in required"):
+    with pytest.raises(SignInRequiredError, match="sign-in required"):
         asyncio.run(proc.run_once())
     row = repo.get_processed("id-sgu")
     assert (row["outcome"], row["completed_steps"]) == ("FAILED", "FORWARDED")

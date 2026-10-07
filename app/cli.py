@@ -3,7 +3,7 @@ import asyncio
 import json
 import sys
 
-from app.graph.auth_service import GraphAuthService
+from app.graph.auth_service import GraphAuthService, SignInRequiredError
 
 
 def _login() -> int:
@@ -17,7 +17,7 @@ def _run_once() -> int:
 
     try:
         summary = asyncio.run(processor.run_once())
-    except RuntimeError as exc:
+    except SignInRequiredError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     print(json.dumps(summary, indent=2))

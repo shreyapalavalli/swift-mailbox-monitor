@@ -5,6 +5,7 @@ from typing import Protocol
 import httpx
 
 from app.db.repository import SwiftRepository
+from app.graph.auth_service import SignInRequiredError
 from app.models.email_message import EmailMessage
 from app.swift.classifier import Classification, classify
 from app.swift.parser import ParsedSwift, parse_swift
@@ -69,8 +70,8 @@ class SwiftProcessor:
     async def process_message(self, msg: EmailMessage) -> dict:
         """Run the message's remaining steps and record the outcome.
 
-        httpx errors and other Exceptions are recorded as FAILED and contained. RuntimeError
-        (sign-in required) and BaseExceptions are re-raised, after persisting progress if a
+        httpx errors and other Exceptions are recorded as FAILED and contained.
+        SignInRequiredError and BaseExceptions are re-raised, after persisting progress if a
         step completed in this call, so a retry never repeats a forward or reply.
         """
         prior = self.repo.get_processed(msg.id)
@@ -117,7 +118,7 @@ class SwiftProcessor:
                     return finish(str(exc)[:500])
                 done.add(step)
         except Exception as exc:
-            if not isinstance(exc, RuntimeError):
+            if not isinstance(exc, SignInRequiredError):
                 return finish(repr(exc)[:500])
             if done != set(prior_steps):
                 finish(repr(exc)[:500])

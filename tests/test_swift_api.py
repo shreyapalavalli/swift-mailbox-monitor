@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.db.repository import SwiftRepository
 from app.dependencies import get_processor, get_repository
+from app.graph.auth_service import SignInRequiredError
 from app.main import app
 
 MX_REF = "swi04003-2026-09-08T06:43:03.23847.2373755Z"
@@ -96,12 +97,23 @@ def test_get_mx_reference_with_colons(client):
 
 def test_process_run_and_log(client, proc, repo):
     assert client.post("/api/process/run").json() == {"processed": 3}
-    proc.exc = RuntimeError("Microsoft sign-in required. Visit /auth/login first.")
+    proc.exc = SignInRequiredError("Microsoft sign-in required. Visit /auth/login first.")
     r = client.post("/api/process/run")
     assert r.status_code == 401 and "sign-in" in r.json()["detail"]
     repo.record_processed({"graph_message_id": "m1", "is_swift": 0, "outcome": "SKIPPED"})
     assert len(client.get("/api/process/log?limit=5").json()) == 1
     assert client.get("/api/process/log?limit=0").status_code == 422
+
+
+def test_process_run_unknown_runtime_error_is_500(repo, proc):
+    proc.exc = RuntimeError("bug")
+    app.dependency_overrides[get_repository] = lambda: repo
+    app.dependency_overrides[get_processor] = lambda: proc
+    try:
+        r = TestClient(app, raise_server_exceptions=False).post("/api/process/run")
+    finally:
+        app.dependency_overrides.clear()
+    assert r.status_code == 500
 
 
 def test_cors_header_for_frontend(client):

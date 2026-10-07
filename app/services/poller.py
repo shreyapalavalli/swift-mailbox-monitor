@@ -2,6 +2,8 @@
 import asyncio
 import logging
 
+from app.graph.auth_service import SignInRequiredError
+
 logger = logging.getLogger("swift.poller")
 
 
@@ -10,11 +12,8 @@ async def run_poller(processor, interval_seconds: float, stop: asyncio.Event) ->
         try:
             summary = await processor.run_once()
             logger.info("poll complete: %s", summary)
-        except RuntimeError as exc:
-            if "sign-in required" in str(exc):
-                logger.warning("poll skipped: %s", exc)
-            else:
-                logger.exception("poll failed")
+        except SignInRequiredError as exc:
+            logger.warning("poll skipped: %s", exc)
         except Exception:
             logger.exception("poll failed")
         try:

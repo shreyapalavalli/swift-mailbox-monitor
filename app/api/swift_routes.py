@@ -8,6 +8,7 @@ from pydantic import BaseModel, field_validator
 
 from app.db.repository import SwiftRepository
 from app.dependencies import get_processor, get_repository
+from app.graph.auth_service import SignInRequiredError
 from app.services.processor import SwiftProcessor
 
 router = APIRouter(prefix="/api/swifts", tags=["swifts"])
@@ -106,7 +107,7 @@ def update_swift(reference: str, body: StatusUpdate,
 async def run_process(processor: SwiftProcessor = Depends(get_processor)):
     try:
         return await processor.run_once()
-    except RuntimeError as exc:
+    except SignInRequiredError as exc:
         raise HTTPException(status_code=401, detail=str(exc))
 
 

@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from app.graph.auth_service import GraphAuthService
+from app.graph.auth_service import GraphAuthService, SignInRequiredError
 
 
 def test_delegated_auth_starts_signed_out() -> None:
@@ -14,8 +14,12 @@ def test_delegated_auth_starts_signed_out() -> None:
 def test_delegated_auth_requires_sign_in() -> None:
     service = GraphAuthService()
 
-    with pytest.raises(RuntimeError, match="sign-in required"):
+    with pytest.raises(SignInRequiredError, match="sign-in required"):
         asyncio.run(service.get_access_token())
+
+
+def test_sign_in_required_error_is_a_runtime_error() -> None:
+    assert issubclass(SignInRequiredError, RuntimeError)
 
 
 import json  # noqa: E402

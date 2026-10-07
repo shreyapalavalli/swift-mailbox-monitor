@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config.settings import settings
+from app.graph.auth_service import SignInRequiredError
 from app.services.poller import run_poller
 
 
@@ -30,7 +31,7 @@ async def _run_for(proc, seconds=0.05, interval=0.01):
 
 
 def test_poller_survives_signin_required(caplog):
-    proc = ScriptedProcessor(first=RuntimeError("Microsoft sign-in required. Visit /auth/login first."))
+    proc = ScriptedProcessor(first=SignInRequiredError("Microsoft sign-in required. Visit /auth/login first."))
     with caplog.at_level(logging.INFO, logger="swift.poller"):
         asyncio.run(_run_for(proc))
     assert proc.calls >= 2
@@ -44,6 +45,15 @@ def test_poller_survives_other_errors_and_logs_traceback(caplog):
         asyncio.run(_run_for(proc))
     assert proc.calls >= 2
     assert any(r.levelno == logging.ERROR and r.exc_info for r in caplog.records)
+
+
+def test_poller_logs_plain_runtime_error_with_traceback(caplog):
+    proc = ScriptedProcessor(first=RuntimeError("Microsoft sign-in required? no, a bug"))
+    with caplog.at_level(logging.INFO, logger="swift.poller"):
+        asyncio.run(_run_for(proc))
+    assert proc.calls >= 2
+    assert any(r.levelno == logging.ERROR and r.exc_info for r in caplog.records)
+    assert not any(r.levelno == logging.WARNING for r in caplog.records)
 
 
 def test_poller_logs_summary_at_info(caplog):
