@@ -14,6 +14,7 @@ import time
 from datetime import datetime
 from email.message import EmailMessage
 
+import certifi
 from dotenv import load_dotenv
 
 from scripts.swift_samples import KINDS, make_sample
@@ -82,7 +83,8 @@ def _build_message(sender: str, recipient: str, subject: str, body: str) -> Emai
 
 def _send(msg: EmailMessage, sender: str, password: str) -> None:
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
-        smtp.starttls(context=ssl.create_default_context())
+        # certifi's bundle: python.org macOS builds ship without a usable system trust store.
+        smtp.starttls(context=ssl.create_default_context(cafile=certifi.where()))
         smtp.login(sender, password)
         smtp.send_message(msg)
 
@@ -155,6 +157,10 @@ def main(argv=None) -> int:
                 except smtplib.SMTPAuthenticationError:
                     print("error: Gmail rejected the login. Check GMAIL_APP_PASSWORD and GENERATOR_SENDER.",
                           file=sys.stderr)
+                    return 2
+                except ssl.SSLCertVerificationError as exc:
+                    print(f"error: could not verify Gmail's TLS certificate ({exc}). This won't fix itself "
+                          "by retrying; check for a proxy or antivirus intercepting TLS.", file=sys.stderr)
                     return 2
                 except (smtplib.SMTPException, OSError) as exc:
                     failures += 1

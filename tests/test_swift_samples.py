@@ -318,3 +318,41 @@ def test_scenario_rejects_kinds_and_count(cli_env, capsys, extra):
 
 def test_auto_without_scenario_is_rejected(cli_env, capsys):
     assert generate_swifts.main(["--auto", "--dry-run", "--count", "1"]) == 2
+
+
+# --- TLS trust store ---
+
+def test_send_verifies_tls_with_certifi_bundle(cli_env):
+    import certifi
+    seen = {}
+
+    class RecordingSMTP(FakeSMTP):
+        def starttls(self, *args, context=None, **kwargs):
+            seen["context"] = context
+            super().starttls()
+
+    cli_env.setenv("GMAIL_APP_PASSWORD", "app-pw")
+    cli_env.setattr(generate_swifts.smtplib, "SMTP", RecordingSMTP)
+    created = {}
+    real = generate_swifts.ssl.create_default_context
+    cli_env.setattr(generate_swifts.ssl, "create_default_context",
+                    lambda **kw: created.update(kw) or real(**kw))
+    assert generate_swifts.main(["--count", "1"]) == 0
+    assert created.get("cafile") == certifi.where()
+    assert seen["context"].verify_mode == generate_swifts.ssl.CERT_REQUIRED
+
+
+def test_certificate_error_exits_2_without_retrying(cli_env, capsys):
+    import ssl
+    sleeps = []
+    cli_env.setattr(generate_swifts.time, "sleep", sleeps.append)
+
+    class BadCertSMTP(FakeSMTP):
+        def starttls(self, *args, **kwargs):
+            raise ssl.SSLCertVerificationError("certificate verify failed: unable to get local issuer certificate")
+
+    cli_env.setenv("GMAIL_APP_PASSWORD", "app-pw")
+    cli_env.setattr(generate_swifts.smtplib, "SMTP", BadCertSMTP)
+    assert generate_swifts.main(["--count", "3"]) == 2
+    assert len(FakeSMTP.instances) == 1 and sleeps == []
+    assert "certificate" in capsys.readouterr().err.lower()
