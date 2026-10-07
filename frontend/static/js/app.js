@@ -1,18 +1,20 @@
 window.swiftMonitorApp = {
   page: document.body.dataset.page || 'overview',
   lastKnownMetrics: null,
+  CONNECTION_CHECK_MS: 60000, // each check calls Microsoft Graph; don't do it on every poll
+  lastConnectionCheck: 0,
+  queueLoaded: false,
 
   initialize() {
     this.bindPageActions();
     this.bindCheckNow();
-    this.refreshAll();
     window.swiftMonitorPoller.schedule();
   },
 
   bindPageActions() {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
-        this.refreshAll();
+        window.swiftMonitorPoller.pollNow();
       }
     });
 
@@ -42,28 +44,42 @@ window.swiftMonitorApp = {
       } catch (error) {
         window.swiftMonitorAlerts.showToast(error.message || 'Could not check mailbox', 'error');
       } finally {
+        this.refreshAll({ forceConnectionCheck: true });
         button.disabled = false;
         button.textContent = 'Check now';
       }
     });
   },
 
-  async refreshAll() {
+  /** Refresh everything; resolves to false when the backend is unreachable (the poller backs off). */
+  async refreshAll({ forceConnectionCheck = false } = {}) {
     try {
-      await Promise.all([
+      const dueForCheck = forceConnectionCheck || Date.now() - this.lastConnectionCheck >= this.CONNECTION_CHECK_MS;
+      const [metricsOk] = await Promise.all([
         this.loadMetrics(),
         this.loadQueue(),
         this.loadActivity(),
-        this.checkConnection(),
+        dueForCheck ? this.checkConnection() : Promise.resolve(),
       ]);
-      this.renderCurrentPage();
-    } catch (error) {
-      const pill = document.getElementById('connection-pill');
-      if (pill) {
-        pill.textContent = 'Backend unreachable';
-        pill.className = 'pill danger';
+      if (!metricsOk) {
+        this.showBackendUnreachable();
+        return false;
       }
+      this.renderCurrentPage();
+      return true;
+    } catch (error) {
+      this.showBackendUnreachable();
+      return false;
     }
+  },
+
+  showBackendUnreachable() {
+    const pill = document.getElementById('connection-pill');
+    if (pill) {
+      pill.textContent = 'Backend unreachable';
+      pill.className = 'pill danger';
+    }
+    this.lastConnectionCheck = 0; // re-check the mailbox connection as soon as the backend is back
   },
 
   async loadMetrics() {
@@ -73,8 +89,10 @@ window.swiftMonitorApp = {
       if (metrics.last_processed_at) {
         window.swiftMonitorStore.lastProcessedAt = metrics.last_processed_at;
       }
+      return true;
     } catch (error) {
       console.warn('Metrics unavailable:', error);
+      return false;
     }
   },
 
@@ -82,7 +100,16 @@ window.swiftMonitorApp = {
     try {
       const rows = await window.swiftMonitorApi.listSwifts({ limit: 1000 });
       const normalized = Array.isArray(rows) ? rows : [];
+      const previous = window.swiftMonitorStore.rows;
+      if (this.queueLoaded) {
+        // Toast each item that newly became PRIORITY (new amendment, or a reopened reference).
+        normalized
+          .filter((row) => row.status === 'PRIORITY' && previous.get(row.reference)?.status !== 'PRIORITY')
+          .forEach((row) => window.swiftMonitorAlerts.notifyPriority(row));
+      }
+      this.queueLoaded = true;
       window.swiftMonitorStore.setRows(normalized);
+      window.swiftMonitorAlerts.updateTitle(normalized.filter((row) => row.status === 'PRIORITY').length);
       window.swiftMonitorStore.setCursor(normalized);
       if (!window.swiftMonitorStore.cursor) {
         window.swiftMonitorStore.cursor = new Date().toISOString();
@@ -102,6 +129,7 @@ window.swiftMonitorApp = {
   },
 
   async checkConnection() {
+    this.lastConnectionCheck = Date.now();
     try {
       const user = await window.swiftMonitorApi.getConnectionStatus();
       const identity = user.userPrincipalName || user.displayName || 'Connected';
@@ -190,11 +218,11 @@ window.swiftMonitorApp = {
       const openPriorityRows = Array.from(window.swiftMonitorStore.rows.values()).filter((row) => row.status === 'PRIORITY');
       if (!openPriorityRows.length) {
         alertStrip.innerHTML = '<div class="empty-state">No priority alerts.</div>';
-        return;
+      } else {
+        alertStrip.innerHTML = openPriorityRows.map((row) => `
+          <button class="alert-chip" type="button" data-reference="${this.esc(row.reference)}">${this.esc(row.reference)} · ${this.esc(row.message_type || 'Unknown')} · ${this.esc(row.category)}</button>
+        `).join('');
       }
-      alertStrip.innerHTML = openPriorityRows.map((row) => `
-        <button class="alert-chip" type="button" data-reference="${row.reference}">${row.reference} · ${row.message_type || 'Unknown'} · ${row.category}</button>
-      `).join('');
       alertStrip.querySelectorAll('button[data-reference]').forEach((button) => {
         button.addEventListener('click', () => {
           window.location.href = `/swift/${encodeURIComponent(button.dataset.reference)}`;
@@ -221,15 +249,15 @@ window.swiftMonitorApp = {
       const amount = window.swiftMonitorStore.formatCurrency(row.amount, row.currency);
       return `
         <tr>
-          <td>${priority}</td>
-          <td><a href="/swift/${encodeURIComponent(row.reference)}">${row.reference}</a></td>
-          <td>${row.message_type || '—'}</td>
-          <td>${row.category || '—'}</td>
-          <td>${amount}</td>
+          <td class="nowrap">${priority}</td>
+          <td class="ref-cell" title="${this.esc(row.reference)}"><a href="/swift/${encodeURIComponent(row.reference)}">${this.esc(row.reference)}</a></td>
+          <td title="${this.esc(row.message_type || '')}">${this.esc(this.shortType(row.message_type))}</td>
+          <td>${this.esc(row.category || '—')}</td>
+          <td class="nowrap">${this.esc(amount)}</td>
           <td>${this.relativeTime(row.received_at || row.created_at)}</td>
-          <td><span class="status-badge ${this.statusClass(row.status)}">${row.status}</span></td>
+          <td><span class="status-badge ${this.statusClass(row.status)}">${this.esc(row.status)}</span></td>
           <td>
-            <button class="btn btn-small" data-action="start" data-reference="${row.reference}">Start</button>
+            <button class="btn btn-small" data-action="start" data-reference="${this.esc(row.reference)}">Start</button>
           </td>
         </tr>
       `;
@@ -243,17 +271,17 @@ window.swiftMonitorApp = {
   renderActivityFeed() {
     const feed = document.getElementById('activity-feed');
     if (!feed) return;
-    const rows = window.swiftMonitorStore.activity.slice(0, 10);
+    const rows = window.swiftMonitorStore.activity.filter((item) => item.is_swift === 1 || item.is_swift === true).slice(0, 10);
     if (!rows.length) {
-      feed.innerHTML = '<li class="empty-state">No activity yet.</li>';
+      feed.innerHTML = '<li class="empty-state">No SWIFT activity yet.</li>';
       return;
     }
     feed.innerHTML = rows.map((item) => `
       <li class="activity-item ${item.outcome === 'FAILED' ? 'failed' : ''}">
         <span class="time">${this.formatTime(item.processed_at)}</span>
-        <span class="status-badge ${this.statusClass(item.status || item.outcome)}">${item.status || item.outcome}</span>
-        <span class="ref">${item.reference || '—'}</span>
-        <span class="subject">${(item.subject || '').slice(0, 60)}</span>
+        <span class="status-badge ${this.statusClass(item.status || item.outcome)}">${this.esc(item.status || item.outcome)}</span>
+        <span class="ref" title="${this.esc(item.reference || '')}">${this.esc(item.reference || '—')}</span>
+        <span class="subject" title="${this.esc(item.subject || '')}">${this.esc(item.subject || '')}</span>
       </li>
     `).join('');
   },
@@ -286,18 +314,18 @@ window.swiftMonitorApp = {
 
     tableBody.innerHTML = rows.map((row) => `
       <tr>
-        <td>${row.priority || 'NORMAL'}</td>
-        <td><a href="/swift/${encodeURIComponent(row.reference)}">${row.reference}</a></td>
-        <td>${row.message_type || '—'}</td>
-        <td>${row.category || '—'}</td>
-        <td>${row.sender_bic || '—'}</td>
-        <td>${window.swiftMonitorStore.formatCurrency(row.amount, row.currency)}</td>
-        <td>${(row.business_purpose || '').slice(0, 90)}</td>
+        <td>${this.esc(row.priority || 'NORMAL')}</td>
+        <td class="ref-cell" title="${this.esc(row.reference)}"><a href="/swift/${encodeURIComponent(row.reference)}">${this.esc(row.reference)}</a></td>
+        <td>${this.esc(row.message_type || '—')}</td>
+        <td>${this.esc(row.category || '—')}</td>
+        <td>${this.esc(row.sender_bic || '—')}</td>
+        <td>${this.esc(window.swiftMonitorStore.formatCurrency(row.amount, row.currency))}</td>
+        <td>${this.esc((row.business_purpose || '').slice(0, 90))}</td>
         <td>${this.relativeTime(row.received_at || row.created_at)}</td>
-        <td><span class="status-badge ${this.statusClass(row.status)}">${row.status}</span></td>
-        <td>
-          <button class="btn btn-small" data-action="start" data-reference="${row.reference}">Start</button>
-          <button class="btn btn-small btn-primary" data-action="resolve" data-reference="${row.reference}">Resolve</button>
+        <td><span class="status-badge ${this.statusClass(row.status)}">${this.esc(row.status)}</span></td>
+        <td class="nowrap">
+          <button class="btn btn-small" data-action="start" data-reference="${this.esc(row.reference)}">Start</button>
+          <button class="btn btn-small btn-primary" data-action="resolve" data-reference="${this.esc(row.reference)}">Resolve</button>
         </td>
       </tr>
     `).join('');
@@ -332,13 +360,13 @@ window.swiftMonitorApp = {
     tableBody.innerHTML = rows.map((item) => `
       <tr>
         <td>${this.formatTime(item.processed_at)}</td>
-        <td>${item.folder || '—'}</td>
-        <td>${item.reference || '—'}</td>
-        <td>${item.category || '—'}</td>
-        <td>${item.action || '—'}</td>
-        <td>${item.status || '—'}</td>
-        <td><span class="status-badge ${this.outcomeClass(item.outcome)}">${item.outcome || '—'}</span></td>
-        <td>${(item.subject || '').slice(0, 80)}</td>
+        <td>${this.esc(item.folder || '—')}</td>
+        <td class="ref-cell" title="${this.esc(item.reference || '')}">${this.esc(item.reference || '—')}</td>
+        <td>${this.esc(item.category || '—')}</td>
+        <td>${this.esc(item.action || '—')}</td>
+        <td>${this.esc(item.status || '—')}</td>
+        <td><span class="status-badge ${this.outcomeClass(item.outcome)}" title="${this.esc(item.error || '')}">${this.esc(item.outcome || '—')}</span></td>
+        <td>${this.esc((item.subject || '').slice(0, 80))}</td>
       </tr>
     `).join('');
   },
@@ -354,7 +382,7 @@ window.swiftMonitorApp = {
 
     card.innerHTML = `
       <div class="status-row">
-        <span class="pill ${connection.connected ? 'success' : 'danger'}">${statusText}</span>
+        <span class="pill ${connection.connected ? 'success' : 'danger'}">${this.esc(statusText)}</span>
       </div>
       <div class="system-metrics">
         <div><strong>Last processed</strong><span>${metrics.last_processed_at ? this.formatTime(metrics.last_processed_at) : 'Never'}</span></div>
@@ -370,8 +398,8 @@ window.swiftMonitorApp = {
     logList.innerHTML = logs.map((item) => `
       <div class="log-item">
         <span class="time">${this.formatTime(item.processed_at)}</span>
-        <span class="status-badge ${this.outcomeClass(item.outcome)}">${item.outcome}</span>
-        <span>${item.reference || '—'} ${item.action ? `· ${item.action}` : ''}</span>
+        <span class="status-badge ${this.outcomeClass(item.outcome)}">${this.esc(item.outcome)}</span>
+        <span>${this.esc(item.reference || '—')} ${item.action ? `· ${this.esc(item.action)}` : ''}</span>
       </div>
     `).join('');
   },
@@ -389,17 +417,20 @@ window.swiftMonitorApp = {
       if (title) title.textContent = row.reference;
       if (meta) meta.textContent = `${row.message_type || 'Unknown'} · ${row.category || 'Unknown'} · ${row.status || '—'}`;
 
-      document.getElementById('detail-start-btn')?.addEventListener('click', () => this.updateStatus(row.reference, 'IN_PROGRESS'));
-      document.getElementById('detail-resolve-btn')?.addEventListener('click', () => this.updateStatus(row.reference, 'RESOLVED'));
+      // onclick (not addEventListener): this page re-renders on every poll, and handlers must not pile up.
+      const startBtn = document.getElementById('detail-start-btn');
+      const resolveBtn = document.getElementById('detail-resolve-btn');
+      if (startBtn) startBtn.onclick = () => this.updateStatus(row.reference, 'IN_PROGRESS');
+      if (resolveBtn) resolveBtn.onclick = () => this.updateStatus(row.reference, 'RESOLVED');
 
       detailWrap.innerHTML = `
         <div class="detail-card">
           <h3>Key details</h3>
           <dl>
-            <div><dt>Related reference</dt><dd>${row.related_reference || '—'}</dd></div>
-            <div><dt>Sender BIC</dt><dd>${row.sender_bic || '—'}</dd></div>
-            <div><dt>Receiver BIC</dt><dd>${row.receiver_bic || '—'}</dd></div>
-            <div><dt>Amount</dt><dd>${window.swiftMonitorStore.formatCurrency(row.amount, row.currency)}</dd></div>
+            <div><dt>Related reference</dt><dd>${this.esc(row.related_reference || '—')}</dd></div>
+            <div><dt>Sender BIC</dt><dd>${this.esc(row.sender_bic || '—')}</dd></div>
+            <div><dt>Receiver BIC</dt><dd>${this.esc(row.receiver_bic || '—')}</dd></div>
+            <div><dt>Amount</dt><dd>${this.esc(window.swiftMonitorStore.formatCurrency(row.amount, row.currency))}</dd></div>
             <div><dt>Received</dt><dd>${this.formatTime(row.received_at)}</dd></div>
           </dl>
         </div>
@@ -410,7 +441,7 @@ window.swiftMonitorApp = {
         <div class="detail-card">
           <h3>Why this category</h3>
           <p>${this.escapeHtml(row.reason || 'No reason supplied.')}</p>
-          ${(row.matched_terms || []).map((term) => `<span class="chip">${this.escapeHtml(term)}</span>`).join('') || '<p>None</p>'}
+          ${(row.matched_terms || []).map((term) => `<span class="chip">${this.escapeHtml(term)}</span>`).join('') || '<p class="muted">No keywords matched.</p>'}
         </div>
         <div class="detail-card">
           <h3>Message text</h3>
@@ -482,6 +513,16 @@ window.swiftMonitorApp = {
     } catch (error) {
       return value;
     }
+  },
+
+  /** "camt.056.001.08" -> "camt.056"; MT types unchanged. */
+  shortType(type) {
+    if (!type) return '—';
+    return /^[a-z]{4}\.\d{3}\./.test(type) ? type.split('.').slice(0, 2).join('.') : type;
+  },
+
+  esc(value) {
+    return this.escapeHtml(value);
   },
 
   escapeHtml(value) {

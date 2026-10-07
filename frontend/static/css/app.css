@@ -465,3 +465,32 @@ chip, .chip {
     align-items: flex-start;
   }
 }
+
+/* Links readable on the dark theme */
+a { color: var(--primary); text-decoration: none; }
+a:visited { color: var(--primary); }
+a:hover { text-decoration: underline; }
+
+/* Keep long content (MX references, email subjects) inside their panels */
+.dashboard-grid > * { min-width: 0; }
+/* Activity item: "time · status · reference" on one line, subject underneath */
+.activity-item { grid-template-columns: auto auto minmax(0, 1fr); row-gap: 4px; }
+.activity-item .ref { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.activity-item .subject { grid-column: 1 / -1; min-width: 0; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; color: var(--muted); font-size: 0.85rem; }
+.ref-cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 22ch; }
+.dashboard-grid .data-table { min-width: 0; }  /* overview table fits its panel; Actions stays visible */
+.dashboard-grid .data-table th, .dashboard-grid .data-table td { padding: 10px 6px; }
+.dashboard-grid .ref-cell { max-width: 17.5ch; }  /* full 16-char MT references; long MX ones truncate */
+.nowrap { white-space: nowrap; }
+
+/* Priority (amendment) toast with key details */
+.toast.priority-toast { display: flex; flex-direction: column; gap: 4px; max-width: 380px; }
+.toast.priority-toast .toast-purpose { color: var(--muted); font-size: 0.85rem; }
+.toast.priority-toast a { font-weight: 700; align-self: flex-start; }
+
+/* Queue gets the room it needs; stack the panels before the table would clip */
+.dashboard-grid { grid-template-columns: minmax(0, 1.75fr) minmax(300px, 1fr); }
+@media (max-width: 1320px) {
+  .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+}
