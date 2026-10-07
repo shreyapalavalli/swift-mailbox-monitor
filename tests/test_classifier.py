@@ -170,3 +170,12 @@ def test_token_used_by_a_stem_never_also_scores_a_term_of_that_category():
 
 def test_ocr_typo_on_exact_term_still_fuzzy():
     assert classify(parsed_from_narrative("PLS ARRANGE CALLBAK FOR FT26090811223")).category is Category.CALLBACK
+
+
+@pytest.mark.parametrize("narrative,category", [
+    ("PLEASE CHANGE THE\nBENEFICIARY NAME TO ACME", Category.AMENDMENT),
+    ("REQUEST TO CORRECT\nFIELD 59", Category.AMENDMENT),
+    ("PLS CONFIRM THE DETAILS\nBY PHONE", Category.CALLBACK),
+])
+def test_phrases_match_across_line_wraps(narrative, category):
+    assert classify(parsed_from_narrative(narrative)).category is category

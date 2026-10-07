@@ -34,7 +34,7 @@ def _words(phrase: str, weight: float) -> Phrase:
 
 
 def _regex(label: str, pattern: str, weight: float) -> Phrase:
-    return label, re.compile(pattern), weight
+    return label, re.compile(pattern, re.S), weight  # OCR'd narratives wrap mid-phrase
 
 
 # Category -> (phrases, stems, terms). Stems match any token they prefix (CANCEL -> CANCELLING) and
