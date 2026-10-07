@@ -101,3 +101,24 @@ def test_fetch_by_id_sends_prefer_header() -> None:
     asyncio.run(_service(handler).fetch_message_by_id("m1"))
 
     assert seen[0].headers["prefer"] == PREFER
+
+
+def test_fetch_unread_has_no_orderby_and_sorts_newest_first_across_pages() -> None:
+    seen: list[httpx.Request] = []
+    pages = [
+        {"value": [{"id": "old", "receivedDateTime": "2026-09-01T08:00:00Z"},
+                   {"id": "none"}],
+         "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$skip=2"},
+        {"value": [{"id": "new", "receivedDateTime": "2026-09-08T08:00:00Z"},
+                   {"id": "mid", "receivedDateTime": "2026-09-05T08:00:00Z"}]},
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=pages[len(seen) - 1])
+
+    result = asyncio.run(_service(handler).fetch_unread_messages())
+
+    assert "$orderby" not in seen[0].url.params
+    assert seen[0].url.params["$filter"] == "isRead eq false"
+    assert [m.id for m in result] == ["new", "mid", "old", "none"]

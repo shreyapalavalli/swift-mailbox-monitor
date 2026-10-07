@@ -94,7 +94,8 @@ class GraphMailService:
                 "isRead,"
                 "hasAttachments"
             ),
-            "$orderby": "receivedDateTime desc",
+            # No $orderby: combined with this $filter, Graph can reject the query as
+            # InefficientFilter (400). Sorted client-side below instead.
             "$top": top,
         }
 
@@ -117,6 +118,15 @@ class GraphMailService:
                 messages.append(message)
 
             url = response.get("@odata.nextLink")
+
+        # Newest first; messages without a received time last.
+        messages.sort(
+            key=lambda m: (
+                m.received_date_time is not None,
+                m.received_date_time.timestamp() if m.received_date_time else 0.0,
+            ),
+            reverse=True,
+        )
 
         return messages
 
