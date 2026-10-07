@@ -65,7 +65,7 @@ cd frontend && flask --app app run --port 5001
 - **CORS origin must match exactly.** `http://localhost:5001` and `http://127.0.0.1:5001` are different origins. Open the dashboard with the same host you put in `FRONTEND_ORIGIN`, or the browser blocks the API calls.
 - **Make the API base URL configurable** in the frontend, for example `API_BASE = os.environ.get("SWIFT_API_BASE", "http://localhost:8000")`, and inject it into templates.
 - **Safe test mode:** start the backend with `ACTIONS_ENABLED=false` to classify and store without touching the mailbox. Rows still appear in the API, and the activity feed shows outcome `DRY_RUN`.
-- **Generating test traffic:** `python -m scripts.generate_swifts --count 10 --interval 15` emails realistic SWIFTs of every kind (amendments, camt.056, callbacks, SGU…) into the mailbox. It needs `GMAIL_APP_PASSWORD` in `.env`. Use `--kinds amendment,camt056` to target one flow, for example to test the alert toast.
+- **Generating test traffic:** `python -m scripts.generate_swifts --count 10 --interval 15` emails realistic SWIFTs of every kind (amendments, camt.056, callbacks, SGU…) into the mailbox. It needs `GMAIL_APP_PASSWORD` in `.env`. Use `--kinds amendment,camt056` to target one flow, for example to test the alert toast. `--scenario demo` sends one SWIFT per scenario in a fixed order (amendment, SGU, MT192, camt.056, FT callback, ABA), waiting for Enter between steps. That's the sequence used to demo to the judges, so make sure each step is clearly visible on the dashboard.
 - **Interactive API docs:** `http://localhost:8000/docs` lists every endpoint with a "Try it out" button.
 
 ---
@@ -528,7 +528,7 @@ FastAPI errors are JSON `{"detail": "<message>"}`, or for 422 `{"detail": [ {loc
 6. **System:** connection status, Check now, dry-run banner, error and backoff states.
 7. **Polish:** relative times, local-time display, number formatting, empty states ("No open items 🎉"), keyboard shortcut `/` for search.
 
-Test against the backend with the generator (`--kinds amendment,camt056,callback_ft,sgu_reply,aba_request`). Done means:
+Test against the backend with the generator's demo scenario (`python -m scripts.generate_swifts --scenario demo`, with the backend on `POLL_INTERVAL_SECONDS=10`). Done means:
 
 - [ ] A generated **amendment** produces a toast and alert chip within about 35 s of the email arriving (≤ 30 s poller + ≤ 5 s UI poll). The detail shows reference, related reference, amount, BICs and the "SHOULD READ" narrative.
 - [ ] A **camt.056** appears in the queue as HIGH / ACTION_REQUIRED, and the email stays unread.

@@ -243,3 +243,78 @@ def test_invalid_interval_or_count_is_an_argparse_error(cli_env, capsys, argv):
         generate_swifts.main(["--dry-run", *argv])
     assert exc.value.code == 2
     assert "error:" in capsys.readouterr().err
+
+
+# --- demo scenario mode ---
+
+DEMO_ORDER = ["amendment", "sgu_reply", "cancellation_mt192", "camt056", "callback_ft", "aba_request"]
+
+
+def _sent_kinds(out: str) -> list[str]:
+    return re.findall(r"^--- \[dry-run\] (\S+) ---$", out, re.M)
+
+
+def test_demo_scenario_sends_fixed_sequence_in_order(cli_env, capsys):
+    cli_env.setattr(generate_swifts.smtplib, "SMTP", _no_smtp)
+    assert generate_swifts.main(["--scenario", "demo", "--auto", "--interval", "0", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert _sent_kinds(out) == DEMO_ORDER
+    assert "[1/6]" in out and "PRIORITY" in out and "[6/6]" in out
+
+
+def test_demo_scenario_waits_for_enter_before_each_step(cli_env, capsys):
+    cli_env.setattr(generate_swifts.smtplib, "SMTP", _no_smtp)
+    prompts = []
+    cli_env.setattr("builtins.input", lambda prompt="": prompts.append(prompt) or "")
+    sleeps = []
+    cli_env.setattr(generate_swifts.time, "sleep", sleeps.append)
+    assert generate_swifts.main(["--scenario", "demo", "--dry-run"]) == 0
+    assert len(prompts) == 6 and "Enter" in prompts[0]
+    assert sleeps == []
+
+
+def test_demo_scenario_auto_sleeps_interval_between_steps(cli_env):
+    cli_env.setattr(generate_swifts.smtplib, "SMTP", _no_smtp)
+    sleeps = []
+    cli_env.setattr(generate_swifts.time, "sleep", sleeps.append)
+    assert generate_swifts.main(["--scenario", "demo", "--auto", "--interval", "7", "--dry-run"]) == 0
+    assert sleeps == [7.0] * 5
+
+
+def test_demo_scenario_retries_same_step_after_transient_error(cli_env, capsys):
+    cli_env.setenv("GMAIL_APP_PASSWORD", "app-pw")
+    calls = {"n": 0}
+
+    class FlakySMTP(FakeSMTP):
+        def send_message(self, msg):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise smtplib.SMTPServerDisconnected("boom")
+            super().send_message(msg)
+
+    cli_env.setattr(generate_swifts.smtplib, "SMTP", FlakySMTP)
+    assert generate_swifts.main(["--scenario", "demo", "--auto", "--interval", "0"]) == 0
+    sent = [m for s in FakeSMTP.instances for m in s.sent]
+    assert len(sent) == 6
+    assert re.findall(r"^sent (\S+):", capsys.readouterr().out, re.M) == DEMO_ORDER
+
+
+def test_demo_scenario_stops_cleanly_when_stdin_closes(cli_env, capsys):
+    cli_env.setattr(generate_swifts.smtplib, "SMTP", _no_smtp)
+
+    def closed(prompt=""):
+        raise EOFError
+
+    cli_env.setattr("builtins.input", closed)
+    assert generate_swifts.main(["--scenario", "demo", "--dry-run"]) == 0
+    assert _sent_kinds(capsys.readouterr().out) == []
+
+
+@pytest.mark.parametrize("extra", [["--kinds", "amendment"], ["--count", "2"]])
+def test_scenario_rejects_kinds_and_count(cli_env, capsys, extra):
+    assert generate_swifts.main(["--scenario", "demo", "--dry-run", *extra]) == 2
+    assert "--scenario" in capsys.readouterr().err
+
+
+def test_auto_without_scenario_is_rejected(cli_env, capsys):
+    assert generate_swifts.main(["--auto", "--dry-run", "--count", "1"]) == 2

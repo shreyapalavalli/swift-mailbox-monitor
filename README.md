@@ -142,8 +142,31 @@ python -m scripts.generate_swifts --kinds amendment,sgu_reply --count 4
 | `--count` | run forever | Stop after N messages (must be >= 1). |
 | `--kinds` | all | Comma-separated subset of `cancellation_mt192`, `cancellation_return_mt199`, `camt056`, `camt058`, `amendment`, `callback_ft`, `callback_inv`, `aba_request`, `sgu_reply`, `cls_mt298`. |
 | `--dry-run` | off | Print instead of sending. |
+| `--scenario demo` | off | Send a fixed sequence instead of random kinds (see below). Can't be combined with `--kinds` or `--count`. |
+| `--auto` | off | With `--scenario`: send each step every `--interval` seconds instead of waiting for Enter. |
 
-A transient SMTP or network error does not stop the generator: it prints the error, waits 2, 4, 8, ... seconds (at most 300) and keeps going; the wait resets after a successful send. A rejected Gmail login exits immediately with status 2.
+A transient SMTP or network error does not stop the generator: it prints the error, waits 2, 4, 8, ... seconds (at most 300) and retries the same message; the wait resets after a successful send. A rejected Gmail login exits immediately with status 2.
+
+### Demo scenario
+
+`--scenario demo` sends one SWIFT per automation scenario, in this order, and prints what the audience should see before each step:
+
+| Step | Kind | Expected result |
+|---|---|---|
+| 1 | `amendment` | PRIORITY alert with key extracts on the dashboard |
+| 2 | `sgu_reply` | Forwarded to the CST team and marked read |
+| 3 | `cancellation_mt192` | Auto-closed (marked read) |
+| 4 | `camt056` | Stays unread, HIGH priority in the analyst queue |
+| 5 | `callback_ft` | Automatic acknowledgement reply |
+| 6 | `aba_request` | Analyst queue |
+
+```bash
+python -m scripts.generate_swifts --scenario demo --dry-run              # rehearse: print only
+python -m scripts.generate_swifts --scenario demo                        # presenter presses Enter for each step
+python -m scripts.generate_swifts --scenario demo --auto --interval 45   # hands-free, 45 s apart
+```
+
+For a live demo, start the backend with `POLL_INTERVAL_SECONDS=10` so each step shows up within about 10 s of the email arriving (Gmail to Outlook delivery usually adds 5 to 20 s).
 
 Test mail from Gmail can land in Junk, which is why `junkemail` is polled by default.
 
