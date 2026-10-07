@@ -76,3 +76,53 @@ def test_aba_request():
 def test_empty_narrative_is_other_with_zero_confidence():
     c = classify(parsed_from_narrative(""))
     assert (c.category, c.confidence, c.matched_terms) == (Category.OTHER, 0.0, ())
+
+
+@pytest.mark.parametrize("name", ["mt199_return_funds_cancellation", "mx_camt058_cancellation_notice"])
+def test_real_cancellations_are_strong(load_fixture, name):
+    c = classify(parse_swift(**subject_body(load_fixture(name))))
+    assert c.category is Category.CANCELLATION and c.strong is True
+
+
+def test_type_prior_alone_is_strong():
+    body = ("Swift Output: FIN 192 Request for Cancellation\n20: Transaction Reference Number\nTEST0002\n"
+            "79: Narrative\nREF OUR MT103\nMessage Trailer")
+    assert classify(parse_swift(subject=_SUBJECT, body=body)).strong is True
+
+
+@pytest.mark.parametrize("text", ["PLEASE REFUND OUR CHARGES FOR THIS TRANSFER",
+                                  "HAS OUR PAYMENT BEEN CANCELLED? PLEASE ADVISE",
+                                  "PLEASE RECALL DETAILS AND ADVISE"])
+def test_single_weak_token_is_cancellation_but_not_strong(text):
+    c = classify(parsed_from_narrative(text))
+    assert c.category is Category.CANCELLATION and c.strong is False
+
+
+def test_two_weak_tokens_reach_score_4_and_are_strong():
+    c = classify(parsed_from_narrative("WE RECALL AND REVOKE OUR INSTRUCTION"))
+    assert c.category is Category.CANCELLATION and c.strong is True
+
+
+def test_cancellation_phrase_is_strong():
+    c = classify(parsed_from_narrative("STOP PAYMENT ON OUR MT103"))
+    assert c.category is Category.CANCELLATION and c.strong is True
+
+
+@pytest.mark.parametrize("text", ["PLEASE DO NOT CANCEL THE PAYMENT",
+                                  "PLS DON'T RECALL OUR TRANSFER, RETURN OF FUNDS NOT NEEDED",
+                                  "WE ASKED YOU NOT TO REVOKE THE INSTRUCTION",
+                                  "NO NEED TO RETURN THE FUNDS",
+                                  "THIS IS NOT A CANCELLATION REQUEST"])
+def test_negated_cancellation_wording_is_ignored(text):
+    assert classify(parsed_from_narrative(text)).category is Category.OTHER
+
+
+def test_negation_keeps_type_prior():
+    body = ("Swift Output: FIN 192 Request for Cancellation\n20: Transaction Reference Number\nTEST0002\n"
+            "79: Narrative\nDO NOT CANCEL THE OTHER PAYMENT\nMessage Trailer")
+    c = classify(parse_swift(subject=_SUBJECT, body=body))
+    assert c.category is Category.CANCELLATION and c.strong is True
+
+
+def test_non_cancellation_categories_are_not_strong():
+    assert classify(parsed_from_narrative("PLEASE AMEND FIELD 59 TO READ ACME LTD")).strong is False

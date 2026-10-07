@@ -39,8 +39,11 @@ def decide(parsed: ParsedSwift, classification: Classification, action_mx_types:
         if mx and mx in action_types:
             return Decision(Action.STORE_FOR_ANALYST, category.value, "ACTION_REQUIRED", "HIGH",
                             f"{mx} cancellation requires analyst review")
-        return Decision(Action.MARK_READ, category.value, "AUTO_CLOSED", "LOW",
-                        "Cancellation is auto-closed and marked as read")
+        if classification.strong:
+            return Decision(Action.MARK_READ, category.value, "AUTO_CLOSED", "LOW",
+                            "Cancellation is auto-closed and marked as read")
+        return Decision(Action.STORE_FOR_ANALYST, category.value, "ACTION_REQUIRED", "NORMAL",
+                        "weak cancellation evidence; analyst review")
     if category is Category.AMENDMENT:
         return Decision(Action.STORE_FOR_ANALYST, category.value, "PRIORITY", "HIGH",
                         "Amendment request is a high priority alert")

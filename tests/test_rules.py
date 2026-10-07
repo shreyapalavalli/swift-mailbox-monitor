@@ -15,8 +15,18 @@ def base(load_fixture):
     return parse_swift(**subject_body(load_fixture("mt298_cls_schedule")))
 
 
-def cls(category: Category) -> Classification:
-    return Classification(category=category, confidence=1.0, matched_terms=(), business_purpose=None)
+def cls(category: Category, strong: bool = False) -> Classification:
+    return Classification(category=category, confidence=1.0, matched_terms=(), business_purpose=None,
+                          strong=strong)
+
+
+_SUBJECT = "SWIFT Incoming Funds Transfer message-07/10/26-09.30.00MpGPSMail-0001-000001"
+
+
+def from_narrative(text: str):
+    body = ("Swift Output: FIN 199 Free Format Message\n20: Transaction Reference Number\nTEST0001\n"
+            "79: Narrative\n" + text + "\nMessage Trailer")
+    return parse_swift(subject=_SUBJECT, body=body)
 
 
 def make(base, *, refs=(), mx=None, is_swift=True):
@@ -50,13 +60,32 @@ def test_row3_case_insensitive(base):
 
 
 def test_row4_cancellation(base):
-    d = decide(make(base, mx="camt.058"), cls(Category.CANCELLATION), ACTION_MX)
+    d = decide(make(base, mx="camt.058"), cls(Category.CANCELLATION, strong=True), ACTION_MX)
     check(d, Action.MARK_READ, "CANCELLATION", "AUTO_CLOSED", "LOW")
 
 
 def test_row4_mt_cancellation(base):
-    d = decide(make(base), cls(Category.CANCELLATION), ACTION_MX)
+    d = decide(make(base), cls(Category.CANCELLATION, strong=True), ACTION_MX)
     assert d.action is Action.MARK_READ
+
+
+def test_row4_weak_cancellation_goes_to_analyst(base):
+    d = decide(make(base), cls(Category.CANCELLATION, strong=False), ACTION_MX)
+    check(d, Action.STORE_FOR_ANALYST, "CANCELLATION", "ACTION_REQUIRED", "NORMAL")
+    assert d.reason == "weak cancellation evidence; analyst review"
+
+
+@pytest.mark.parametrize("text", [
+    "PLEASE REFUND OUR CHARGES FOR THIS TRANSFER",
+    "HAS OUR PAYMENT BEEN CANCELLED? PLEASE ADVISE",
+    "PLEASE DO NOT CANCEL THE PAYMENT",
+    "PLEASE RECALL DETAILS AND ADVISE",
+])
+def test_weak_or_negated_cancellation_wording_is_not_auto_closed(text):
+    parsed = from_narrative(text)
+    d = decide(parsed, classify(parsed), ACTION_MX)
+    assert d.action is not Action.MARK_READ
+    assert d.action is Action.STORE_FOR_ANALYST and d.status == "ACTION_REQUIRED"
 
 
 def test_row5_amendment(base):

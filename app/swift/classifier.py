@@ -22,6 +22,7 @@ class Classification:
     confidence: float
     matched_terms: tuple[str, ...]
     business_purpose: str | None
+    strong: bool = False  # CANCELLATION only: evidence strong enough to auto-close
 
 
 # Category -> (phrases, tokens), each a tuple of (term, weight). Dict order is the tie-break order.
@@ -53,6 +54,7 @@ _PHRASE_PATTERNS = {
 
 THRESHOLD = 2.0
 TYPE_PRIOR = 5.0
+STRONG_CANCELLATION_SCORE = 4.0
 _FUZZY_MIN_LEN = 5
 _FUZZY_RATIO = 0.85
 
@@ -61,6 +63,9 @@ _MT_CANCEL_TYPE = re.compile(r"MT\d92")
 _MX_NAME = re.compile(r"[a-z]{4}\.\d{3}\.\d{3}\.\d{2}_([A-Za-z]+?)(?=Requestor\b|[^A-Za-z]|$)")
 _PURPOSE = re.compile(r"PURPOSE OF PAYMENT[.:]?\s*(.+?)(?=\s+\d\.\s|$)", re.S)
 _SENTENCE_END = re.compile(r"[.?!](?:\s|$)")
+_NEGATED_CANCELLATION = re.compile(
+    r"\b(?:DO\s+NOT|DON'?T|NOT\s+TO|NO\s+NEED\s+TO)\s+(?:CANCEL|RECALL|REVOKE|RETURN)"
+    r"|\bNOT\s+A\s+CANCELLATION\b")
 
 
 def _token_matches(term: str, tokens: set[str]) -> bool:
@@ -108,11 +113,17 @@ def classify(parsed: ParsedSwift) -> Classification:
     mx_name = _mx_name(parsed)
     prior = _type_prior(parsed, mx_name)
 
+    negated = bool(_NEGATED_CANCELLATION.search(text))
+
     scores: dict[Category, float] = {}
     matches: dict[Category, tuple[str, ...]] = {}
+    phrase_hit: dict[Category, bool] = {}
     for category, (phrases, terms) in _LEXICON.items():
-        hits = [(p, w) for p, w in phrases if _PHRASE_PATTERNS[p].search(text)]
-        hits += [(t, w) for t, w in terms if _token_matches(t, tokens)]
+        ignored = negated and category is Category.CANCELLATION  # "DO NOT CANCEL": only the type prior counts
+        phrase_hits = [] if ignored else [(p, w) for p, w in phrases if _PHRASE_PATTERNS[p].search(text)]
+        term_hits = [] if ignored else [(t, w) for t, w in terms if _token_matches(t, tokens)]
+        hits = phrase_hits + term_hits
+        phrase_hit[category] = bool(phrase_hits)
         scores[category] = sum(w for _, w in hits) + (TYPE_PRIOR if category is prior else 0.0)
         matches[category] = tuple(term for term, _ in hits)
 
@@ -121,4 +132,6 @@ def classify(parsed: ParsedSwift) -> Classification:
     purpose = _business_purpose(parsed, mx_name)
     if scores[best] < THRESHOLD:
         return Classification(Category.OTHER, 0.0 if total == 0 else scores[best] / total, (), purpose)
-    return Classification(best, scores[best] / total, matches[best], purpose)
+    strong = best is Category.CANCELLATION and (
+        prior is Category.CANCELLATION or phrase_hit[best] or scores[best] >= STRONG_CANCELLATION_SCORE)
+    return Classification(best, scores[best] / total, matches[best], purpose, strong)

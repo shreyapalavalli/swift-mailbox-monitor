@@ -12,7 +12,8 @@ Rules are evaluated in order; the first match wins: not SWIFT, SGU, cancellation
 |---|---|---|
 | Not SWIFT | Ignored, mail untouched | none |
 | SGU (reference starting `SGU` in field 20, field 21 or the narrative) | Forwarded to `CST_MAILBOX`, then marked as read | `ROUTED_CST` (audit row only, not on the action list) |
-| Cancellation | Marked as read | `AUTO_CLOSED` |
+| Cancellation with strong evidence (MTn92 / camt.056 / camt.058 / MX `Cancellation` type, a cancellation phrase such as `RETURN THE FUNDS` or `PLEASE CANCEL`, or several cancellation words) | Marked as read | `AUTO_CLOSED` |
+| Cancellation on weak evidence (one word such as `REFUND` or `CANCELLED`) | Left unread | `ACTION_REQUIRED` |
 | Cancellation, MX type in `CANCELLATION_ACTION_MX_TYPES` (default `camt.056`) | Left unread, waits for an analyst | `ACTION_REQUIRED` (high priority) |
 | Amendment | Left unread, listed on `/api/swifts/alerts` | `PRIORITY` (high priority) |
 | Callback with an `FT` or `INV` reference (must contain a digit) | Reply-all acknowledgement, marked as read | `RESPONDED` |
@@ -21,6 +22,8 @@ Rules are evaluated in order; the first match wins: not SWIFT, SGU, cancellation
 | Any other SWIFT (for example MT298 CLS) | Left unread | `ACTION_REQUIRED` (category `OTHER`) |
 
 A message is SWIFT if its subject starts with `SWIFT Incoming` or the body contains `Swift Output:` / `MX Output:`. Action items are keyed by reference (field 20, else the MX `SWIFT Reference`, else the mail id in the subject); a repeated reference updates the existing row.
+
+Negated wording (`DO NOT CANCEL`, `NO NEED TO RETURN`, `NOT A CANCELLATION`, ...) never counts as cancellation evidence; only the message type can then make it a cancellation.
 
 Note: camt.058 cancellations are auto-closed under the default `CANCELLATION_ACTION_MX_TYPES`; only camt.056 waits for an analyst.
 
