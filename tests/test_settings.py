@@ -22,3 +22,11 @@ def test_subject_body_helper(load_fixture):
 
     fx = load_fixture("mt199_sgu_in_narrative")
     assert subject_body(fx) == {"subject": fx["subject"], "body": fx["body"]}
+
+
+def test_actions_enabled_default_and_env(monkeypatch):
+    from app.config.settings import Settings
+
+    assert Settings(_env_file=None).actions_enabled is True
+    monkeypatch.setenv("ACTIONS_ENABLED", "false")
+    assert Settings(_env_file=None).actions_enabled is False

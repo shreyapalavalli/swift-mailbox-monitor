@@ -211,8 +211,9 @@ def test_polls_every_configured_folder(tmp_path, load_fixture):
 
 
 class _StubProcessor:
-    def __init__(self, result):
+    def __init__(self, result, actions_enabled=True):
         self.result = result
+        self.actions_enabled = actions_enabled
 
     async def run_once(self):
         if isinstance(self.result, Exception):
@@ -393,3 +394,57 @@ def test_log_line_shortens_graph_id_to_last_12_chars(setup, load_fixture, caplog
         asyncio.run(proc.run_once())
     (line,) = [r.getMessage() for r in caplog.records if r.name == "swift.processor"]
     assert line.startswith(long_id[-12:] + " ref=RPIS20260908 category=OTHER action=STORE_FOR_ANALYST")
+
+
+def test_dry_run_makes_no_graph_calls_then_live_run_acts(tmp_path, load_fixture, fixture_inbox):
+    inbox = fixture_inbox + [_msg("id-cb", _SUBJECT, _CALLBACK_BODY)]
+    fake = FakeMail({"inbox": inbox})
+    repo = SwiftRepository(str(tmp_path / "dry.db"))
+    dry = SwiftProcessor(fake, repo, ["inbox"], CST, ["camt.056"], actions_enabled=False)
+
+    summary = asyncio.run(dry.run_once())
+    assert fake.forwards == [] and fake.marked_read == [] and fake.replies == []
+    assert summary["processed"] == 5 and summary["failed"] == 0
+    for msg_id in ("id-sgu", "id-cancel", "id-298", "id-nonswift", "id-cb"):
+        assert repo.get_processed(msg_id)["outcome"] == "DRY_RUN"
+    assert repo.get_processed("id-sgu")["action"] == "FORWARD_TO_CST"
+    assert repo.get_processed("id-sgu")["completed_steps"] == ""
+    assert repo.get_action("RPIS20260908")["status"] == "ACTION_REQUIRED"      # STORE still writes
+    assert repo.get_action("CBK260908-0001")["status"] == "RESPONDED"
+
+    again = asyncio.run(dry.run_once())                                       # DRY_RUN is not DONE
+    assert again["skipped"] == 0 and fake.forwards == []
+
+    live = SwiftProcessor(fake, repo, ["inbox"], CST, ["camt.056"])
+    asyncio.run(live.run_once())
+    assert fake.forwards == [("id-sgu", CST)]
+    assert len(fake.replies) == 1 and fake.replies[0][0] == "id-cb"
+    assert set(fake.marked_read) == {"id-sgu", "id-cancel", "id-cb"}
+    for msg_id in ("id-sgu", "id-cancel", "id-298", "id-nonswift", "id-cb"):
+        assert repo.get_processed(msg_id)["outcome"] == "DONE"
+    assert repo.get_processed("id-cb")["completed_steps"] == "REPLIED,STORED,MARKED_READ"
+
+
+def test_processor_defaults_to_actions_enabled(setup):
+    fake, repo, proc = setup([])
+    assert proc.actions_enabled is True
+
+
+def test_singleton_processor_uses_actions_enabled_setting():
+    import app.dependencies
+    from app.config.settings import settings
+
+    assert app.dependencies.processor.actions_enabled is settings.actions_enabled is True
+
+
+def test_cli_run_once_warns_when_actions_disabled(monkeypatch, caplog, capsys):
+    import logging
+
+    import app.dependencies
+    from app.cli import main
+
+    summary = {"fetched": 0, "processed": 0, "skipped": 0, "failed": 0, "by_action": {}}
+    monkeypatch.setattr(app.dependencies, "processor", _StubProcessor(summary, actions_enabled=False))
+    with caplog.at_level(logging.WARNING):
+        assert main(["run-once"]) == 0
+    assert any(r.levelno == logging.WARNING and "ACTIONS_ENABLED=false" in r.getMessage() for r in caplog.records)

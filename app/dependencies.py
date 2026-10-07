@@ -16,6 +16,7 @@ processor = SwiftProcessor(
     settings.poll_folder_list,
     settings.cst_mailbox,
     settings.cancellation_action_mx_type_list,
+    actions_enabled=settings.actions_enabled,
 )
 
 

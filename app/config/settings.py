@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     poll_folders: str = "inbox,junkemail"
     poll_interval_seconds: int = 30
     poller_enabled: bool = True
+    actions_enabled: bool = True
     frontend_origin: str = "http://localhost:5000"
 
     @property

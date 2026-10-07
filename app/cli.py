@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import logging
 import sys
 
 from app.graph.auth_service import GraphAuthService, SignInRequiredError
@@ -15,7 +16,10 @@ def _login() -> int:
 
 def _run_once() -> int:
     from app.dependencies import processor
+    from app.services.processor import DRY_RUN_WARNING
 
+    if not processor.actions_enabled:
+        logging.getLogger("swift.cli").warning(DRY_RUN_WARNING)
     try:
         summary = asyncio.run(processor.run_once())
     except SignInRequiredError as exc:

@@ -31,6 +31,9 @@ STEPS: dict[Action, tuple[str, ...]] = {
     Action.STORE_FOR_ANALYST: (STORED,),
     Action.IGNORE: (),
 }
+GRAPH_STEPS = frozenset({FORWARDED, REPLIED, MARKED_READ})
+DRY_RUN_WARNING = ("ACTIONS_ENABLED=false: dry run. SWIFTs are classified and stored, "
+                   "but nothing is forwarded, replied to or marked as read.")
 
 
 class MailGateway(Protocol):
@@ -46,12 +49,13 @@ def _first_ref(parsed: ParsedSwift, prefixes: tuple[str, ...]) -> str:
 
 class SwiftProcessor:
     def __init__(self, mail: MailGateway, repo: SwiftRepository, folders: list[str],
-                 cst_mailbox: str, action_mx_types: list[str]):
+                 cst_mailbox: str, action_mx_types: list[str], actions_enabled: bool = True):
         self.mail = mail
         self.repo = repo
         self.folders = folders
         self.cst_mailbox = cst_mailbox
         self.action_mx_types = action_mx_types
+        self.actions_enabled = actions_enabled  # False = dry run: decide and store, never touch the mailbox
         self._lock = asyncio.Lock()
 
     @property
@@ -87,6 +91,8 @@ class SwiftProcessor:
         httpx errors and other Exceptions are recorded as FAILED and contained.
         SignInRequiredError and BaseExceptions are re-raised, after persisting progress if a
         step completed in this call, so a retry never repeats a forward or reply.
+        With actions disabled, Graph steps are skipped and the outcome is DRY_RUN (not DONE), so
+        the message is processed for real once actions are enabled.
         """
         prior = self.repo.get_processed(msg.id)
         prior_steps = [s for s in ((prior or {}).get("completed_steps") or "").split(",") if s]
@@ -108,7 +114,8 @@ class SwiftProcessor:
 
         def finish(error: str | None) -> dict:
             ordered = [s for s in steps if s in done] if steps is not None else prior_steps
-            row.update(outcome="FAILED" if error else "DONE",
+            outcome = "DONE" if self.actions_enabled else "DRY_RUN"
+            row.update(outcome="FAILED" if error else outcome,
                        completed_steps=",".join(ordered), error=error)
             self.repo.record_processed(row)
             logger.info("%s ref=%s category=%s action=%s outcome=%s", msg.id[-12:], row["reference"],
@@ -126,7 +133,7 @@ class SwiftProcessor:
                        message_type=parsed.message_type, category=decision.category,
                        action=decision.action.value, status=decision.status)
             for step in steps:
-                if step in done:
+                if step in done or (not self.actions_enabled and step in GRAPH_STEPS):
                     continue
                 try:
                     await self._run_step(step, msg, parsed, classification, decision, reference)

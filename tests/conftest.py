@@ -11,6 +11,7 @@ os.environ["SWIFT_MAILBOX"] = "me"
 os.environ["TOKEN_CACHE_PATH"] = os.path.join(_TMP, "cache.json")
 os.environ["DATABASE_PATH"] = os.path.join(_TMP, "test.db")
 os.environ["POLLER_ENABLED"] = "false"
+os.environ["ACTIONS_ENABLED"] = "true"
 
 import pytest  # noqa: E402
 

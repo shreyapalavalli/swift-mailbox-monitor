@@ -2,6 +2,8 @@
 
 FastAPI backend that polls an Outlook.com mailbox through Microsoft Graph, recognises incoming SWIFT messages (MT and MX), applies automation rules, and exposes the results to a dashboard through a JSON API. Non-SWIFT mail is never modified (not marked as read, not moved). Parsing and classification use the Python standard library only; storage is SQLite.
 
+> **Warning:** the first poll acts on mail that is already in the mailbox. Read [First run](#first-run) before you start the server or run `run-once`.
+
 ## Automation rules
 
 Rules are evaluated in order; the first match wins: not SWIFT, SGU, cancellation, amendment, callback, ABA, other.
@@ -57,6 +59,7 @@ Values below are placeholders. `.env` is gitignored.
 | `POLL_FOLDERS` | `inbox,junkemail` | Comma-separated Graph folder names to poll. |
 | `POLL_INTERVAL_SECONDS` | `30` | Seconds between polls. |
 | `POLLER_ENABLED` | `true` | Set `false` to disable the background poller. |
+| `ACTIONS_ENABLED` | `true` | Set `false` for a dry run: messages are classified and action items stored, but nothing is forwarded, replied to or marked as read. |
 | `FRONTEND_ORIGIN` | `http://localhost:5000` | Origin allowed by CORS. |
 
 Generator keys (read by `scripts/generate_swifts.py`):
@@ -91,6 +94,23 @@ python -m app.cli run-once   # prints a JSON summary
 ```
 
 Do not run `python -m app.cli run-once` while the server is running. It is a separate process, so the server's run lock cannot see it, and both could forward or reply to the same message.
+
+## First run
+
+The first poll processes every unread message already in `POLL_FOLDERS` (`inbox` and `junkemail`), not only new mail. With `ACTIONS_ENABLED=true` and the current mailbox contents it will:
+
+- **forward the 2 real SGU SWIFTs to `CST_MAILBOX`** (`shreyapalavalli@gmail.com`) and mark them as read;
+- mark the MT199 return-funds cancellation and the camt.058 cancellation notice as read (auto-closed);
+- leave the MT298 CLS schedule unread and store it as `ACTION_REQUIRED` (category `OTHER`);
+- leave non-SWIFT mail untouched (not read, not moved), but record its subject and sender in the processed-message log.
+
+Forwards and replies are real emails and cannot be undone. Do a dry run first:
+
+```bash
+ACTIONS_ENABLED=false uvicorn app.main:app      # or: ACTIONS_ENABLED=false python -m app.cli run-once
+```
+
+A dry run classifies and stores everything, makes no mailbox changes, and records outcome `DRY_RUN` in `/api/process/log`. Check the log and `/api/swifts`, then restart with `ACTIONS_ENABLED=true` (the default): `DRY_RUN` messages are not treated as done, so they are then processed for real. The app logs a warning at startup while actions are disabled.
 
 ## Run
 

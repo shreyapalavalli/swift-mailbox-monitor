@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,12 +11,16 @@ from app.config.settings import settings
 from app.dependencies import processor
 from app.logging_config import configure_logging
 from app.services.poller import run_poller
+from app.services.processor import DRY_RUN_WARNING
 
 configure_logging()
+logger = logging.getLogger("swift.main")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not processor.actions_enabled:
+        logger.warning(DRY_RUN_WARNING)
     stop = asyncio.Event()
     task = None
     if settings.poller_enabled:

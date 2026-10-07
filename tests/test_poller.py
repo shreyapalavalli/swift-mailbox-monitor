@@ -130,3 +130,21 @@ def test_cors_header_for_frontend_origin():
     with TestClient(app) as client:
         r = client.get("/health", headers={"Origin": settings.frontend_origin})
     assert r.headers["access-control-allow-origin"] == settings.frontend_origin
+
+
+def test_lifespan_warns_when_actions_disabled(monkeypatch, caplog):
+    from app.dependencies import processor
+    from app.main import app
+
+    monkeypatch.setattr(processor, "actions_enabled", False)
+    with caplog.at_level(logging.WARNING), TestClient(app) as client:
+        assert client.get("/health").status_code == 200
+    assert any(r.levelno == logging.WARNING and "ACTIONS_ENABLED" in r.getMessage() for r in caplog.records)
+
+
+def test_lifespan_silent_when_actions_enabled(monkeypatch, caplog):
+    from app.main import app
+
+    with caplog.at_level(logging.WARNING), TestClient(app) as client:
+        assert client.get("/health").status_code == 200
+    assert not any("ACTIONS_ENABLED" in r.getMessage() for r in caplog.records)
