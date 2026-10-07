@@ -36,9 +36,11 @@ _MT_TYPE = re.compile(r"Swift\s+Output\s*:\s*FIN\s+(\d{3})", re.I)
 _MX_TYPE = re.compile(r"MX\s+Output\s*:\s*([a-z]{4}\.\d{3}\.\d{3}\.\d{2})", re.I)
 _MAIL_ID = re.compile(r"(Mp[A-Za-z]+-\d+-\d+)")
 
-_F20 = re.compile(r"\b20:\s*Transaction Reference Number\s+(\S+)", re.I)
-_F21 = re.compile(r"\b21:\s*Related Reference\s+(\S+)", re.I)
-_F12 = re.compile(r"\b12:\s*Sub-Message Type\s+(\d{3})", re.I)
+# A field value is one token that is not itself a label ("21:", "77E:") and does not end in ':'.
+_VALUE = r"(?!\d{2}[A-Z]?:)(\S*[^\s:])(?!\S)"
+_F20 = re.compile(r"\b20:\s*Transaction Reference Number\s+" + _VALUE, re.I)
+_F21 = re.compile(r"\b21:\s*Related Reference\s+" + _VALUE, re.I)
+_F12 = re.compile(r"\b12:\s*Sub-Message Type\s+(\d{3})\b", re.I)
 _RAW20 = re.compile(r"^:20:[ \t]*([^\s:]\S*)", re.M)
 _RAW21 = re.compile(r"^:21:[ \t]*([^\s:]\S*)", re.M)
 

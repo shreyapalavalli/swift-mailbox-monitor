@@ -62,3 +62,16 @@ def test_reference_falls_back_to_mail_id():
 def test_none_inputs_do_not_raise():
     p = parse_swift(None, None)
     assert p.is_swift is False and p.reference is None and p.text == ""
+
+
+@pytest.mark.parametrize("body,f20,f21", [
+    ("Swift Output: FIN 199\n20: Transaction Reference Number\n21: Related Reference\nX1\n79: Narrative\nHI",
+     None, "X1"),
+    ("Swift Output: FIN 199\n20: Transaction Reference Number\nT1\n21: Related Reference\n79: Narrative\nHI",
+     "T1", None),
+    ("Swift Output: FIN 199\n20: Transaction Reference Number\n21: Related Reference\n77E: Proprietary Message\n"
+     ":20:RAW20\n:21:RAW21\nMessage Trailer", "RAW20", "RAW21"),
+])
+def test_label_followed_by_label_is_not_a_value(body, f20, f21):
+    p = parse_swift("SWIFT Incoming Funds Transfer message", body)
+    assert (p.transaction_reference, p.related_reference) == (f20, f21)
