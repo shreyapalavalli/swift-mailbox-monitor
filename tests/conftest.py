@@ -12,6 +12,15 @@ os.environ["TOKEN_CACHE_PATH"] = os.path.join(_TMP, "cache.json")
 os.environ["DATABASE_PATH"] = os.path.join(_TMP, "test.db")
 os.environ["POLLER_ENABLED"] = "false"
 os.environ["ACTIONS_ENABLED"] = "true"
+# Pin the rest to their defaults so a developer's .env can't change test behaviour.
+os.environ["GRAPH_BASE_URL"] = "https://graph.microsoft.com/v1.0"
+os.environ["GRAPH_REDIRECT_URI"] = "http://localhost:8000/auth/callback"
+os.environ["GRAPH_SCOPES"] = "Mail.ReadWrite Mail.Send User.Read"
+os.environ["CST_MAILBOX"] = "shreyapalavalli@gmail.com"
+os.environ["CANCELLATION_ACTION_MX_TYPES"] = "camt.056"
+os.environ["POLL_FOLDERS"] = "inbox,junkemail"
+os.environ["POLL_INTERVAL_SECONDS"] = "30"
+os.environ["FRONTEND_ORIGIN"] = "http://localhost:5000"
 
 import pytest  # noqa: E402
 
