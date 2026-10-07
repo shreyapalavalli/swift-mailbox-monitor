@@ -151,7 +151,7 @@ def test_callback_ft_replies_and_stores_responded(setup):
     assert action["amount"] == "1250.00" and action["currency"] == "USD"
     assert action["received_at"] == "2026-09-08T07:00:00+00:00"
     assert isinstance(json.loads(action["matched_terms"]), list) and json.loads(action["matched_terms"])
-    assert repo.get_processed("id-cb")["completed_steps"] == "REPLIED,MARKED_READ,STORED"
+    assert repo.get_processed("id-cb")["completed_steps"] == "REPLIED,STORED,MARKED_READ"
     assert summary["by_action"] == {"AUTO_REPLY": 1}
 
 
@@ -269,12 +269,13 @@ def test_store_crash_after_reply_is_recorded_and_not_replied_again(setup, monkey
     first = asyncio.run(proc.run_once())
     row = repo.get_processed("id-cb")
     assert first["failed"] == 1
-    assert (row["outcome"], row["completed_steps"]) == ("FAILED", "REPLIED,MARKED_READ")
+    assert (row["outcome"], row["completed_steps"]) == ("FAILED", "REPLIED")
     assert "KeyError" in row["error"]
+    assert fake.marked_read == []
 
     asyncio.run(proc.run_once())
     row = repo.get_processed("id-cb")
-    assert (row["outcome"], row["completed_steps"]) == ("DONE", "REPLIED,MARKED_READ,STORED")
+    assert (row["outcome"], row["completed_steps"]) == ("DONE", "REPLIED,STORED,MARKED_READ")
     assert len(fake.replies) == 1 and fake.marked_read == ["id-cb"]
     assert repo.get_action("CBK260908-0001")["status"] == "RESPONDED"
 
@@ -353,3 +354,18 @@ def test_overlapping_runs_forward_once(setup, load_fixture):
     assert fake.forwards == [("id-sgu", CST)]
     assert first["processed"] == 1 and second["skipped"] == 1
     assert proc.is_running is False
+
+
+def test_mark_read_timeout_after_reply_keeps_responded_row(setup):
+    fake, repo, proc = setup([_msg("id-cb", _SUBJECT, _CALLBACK_BODY)])
+    fake.fail_once["mark_as_read"] = "id-cb"
+    first = asyncio.run(proc.run_once())
+    row = repo.get_processed("id-cb")
+    assert first["failed"] == 1
+    assert (row["outcome"], row["completed_steps"]) == ("FAILED", "REPLIED,STORED")
+    assert repo.get_action("CBK260908-0001")["status"] == "RESPONDED"
+
+    asyncio.run(proc.run_once())
+    row = repo.get_processed("id-cb")
+    assert (row["outcome"], row["completed_steps"]) == ("DONE", "REPLIED,STORED,MARKED_READ")
+    assert len(fake.replies) == 1 and fake.marked_read == ["id-cb"]
