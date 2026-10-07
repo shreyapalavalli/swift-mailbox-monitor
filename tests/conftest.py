@@ -27,3 +27,8 @@ def load_fixture():
 
 def subject_body(fixture: dict) -> dict:
     return {"subject": fixture["subject"], "body": fixture["body"]}
+
+
+class FakeAuth:
+    async def get_access_token(self) -> str:
+        return "tok"
