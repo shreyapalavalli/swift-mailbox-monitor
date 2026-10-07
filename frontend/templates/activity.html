@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Activity · SWIFT Monitor{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="toolbar-row">
+        <div class="filters">
+            <select id="activity-outcome-filter">
+                <option value="">All outcomes</option>
+                <option value="DONE">Done</option>
+                <option value="FAILED">Failed</option>
+                <option value="DRY_RUN">Dry run</option>
+            </select>
+            <label class="inline-toggle">
+                <input id="activity-swift-only" type="checkbox" checked />
+                SWIFT only
+            </label>
+        </div>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Folder</th>
+                    <th>Reference</th>
+                    <th>Category</th>
+                    <th>Action</th>
+                    <th>Status</th>
+                    <th>Outcome</th>
+                    <th>Subject</th>
+                </tr>
+            </thead>
+            <tbody id="activity-table-body"></tbody>
+        </table>
+    </div>
+</section>
+
+<script>
+    document.body.dataset.page = 'activity';
+</script>
+{% endblock %}
