@@ -41,7 +41,16 @@ def test_every_sample_kind_is_seeded_at_least_once(tmp_path, no_sleep):
     assert len(swift_rows) == len(KINDS)
 
 
-def test_seed_is_deterministic_for_a_given_seed(tmp_path, no_sleep):
+def test_seed_is_deterministic_for_a_given_seed(tmp_path, no_sleep, monkeypatch):
+    from datetime import datetime as real_datetime, timezone
+
+    class FrozenDatetime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return real_datetime(2026, 10, 7, 9, 30, tzinfo=timezone.utc).astimezone(tz) if tz \
+                else real_datetime(2026, 10, 7, 9, 30)
+
+    monkeypatch.setattr(seed_demo_data, "datetime", FrozenDatetime)  # MX references embed timestamps
     refs = []
     for name in ("a.db", "b.db"):
         db = tmp_path / name

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}SWIFT Monitor{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+</head>
+
+<body data-page="{{ self._TemplateReference__context.name|default('overview') }}">
+    <div class="app-shell">
+        <header class="topbar">
+            <div class="brand-block">
+                <div class="brand">SWIFT Monitor</div>
+            </div>
+            <div class="status-strip">
+                <span id="connection-pill" class="pill neutral">Checking connection…</span>
+                <span id="last-activity" class="muted">No activity yet</span>
+                <button id="check-now-btn" class="btn btn-primary" type="button">Check now</button>
+            </div>
+        </header>
+
+        <div id="dry-run-banner" class="banner hidden">
+            DRY RUN: no mailbox changes are being applied.
+        </div>
+
+        <nav class="nav-tabs" aria-label="Main navigation">
+            <a href="/" class="nav-link">Overview</a>
+            <a href="/queue" class="nav-link">Queue</a>
+            <a href="/activity" class="nav-link">Activity</a>
+            <a href="/system" class="nav-link">System</a>
+        </nav>
+
+        <main class="page-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <script>
+        window.SWIFT_API_BASE = {{ api_base | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/store.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/poller.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+
+</html>

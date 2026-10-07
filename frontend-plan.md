@@ -121,7 +121,7 @@ The seed gives you every state the UI has to render:
 | `--count` | `40` | SWIFTs in the initial batch (every kind at least once). |
 | `--reset` | off | Delete the database file first. |
 | `--live` / `--interval` / `--live-count` | off / `8` / forever | Keep adding one SWIFT every N seconds. |
-| `--seed` | `7` | Random seed. The same seed gives the same data. |
+| `--seed` | `7` | Random seed. The same seed gives the same messages (timestamps, and MX references that embed them, follow the clock). |
 
 What's different offline, and expected:
 - `GET /api/graph/test-user` returns **500**, so the connection pill shows "not connected" (§4.8).

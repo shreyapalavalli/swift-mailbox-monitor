@@ -128,7 +128,8 @@ def _business_purpose(parsed: ParsedSwift, mx_name: str | None) -> str | None:
     if m:
         return " ".join(m.group(1).split())
     if mx_name:
-        return " ".join(re.findall(r"[A-Z][a-z]*", mx_name))
+        # "FIToFIPaymentCancellationRequest" -> "FI To FI Payment Cancellation Request"
+        return " ".join(re.findall(r"[A-Z]+(?=[A-Z][a-z])|[A-Z][a-z]+|[A-Z]+", mx_name))
     narrative = " ".join(parsed.narrative.split())
     if not narrative:
         return None

@@ -186,7 +186,7 @@ python -m scripts.seed_demo_data --live --count 1               # optional: +1 S
 | `--count` | `40` | SWIFTs in the initial batch (every kind at least once), plus 3 non-SWIFT emails. |
 | `--reset` | off | Delete the database file first. |
 | `--live` / `--interval` / `--live-count` | off / `8` / forever | Keep adding one SWIFT every N seconds. |
-| `--seed` | `7` | Random seed. The same seed gives the same data. |
+| `--seed` | `7` | Random seed. The same seed gives the same messages (timestamps, and MX references that embed them, follow the clock). |
 
 The seeded data covers every dashboard state:
 - PRIORITY, ACTION_REQUIRED and RESPONDED queue items

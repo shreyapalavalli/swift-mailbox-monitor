@@ -179,3 +179,10 @@ def test_ocr_typo_on_exact_term_still_fuzzy():
 ])
 def test_phrases_match_across_line_wraps(narrative, category):
     assert classify(parsed_from_narrative(narrative)).category is category
+
+
+def test_mx_long_name_keeps_acronyms_together():
+    body = ("MX Output: camt.056.001.08 CBPRPlus-camt.056.001.08_FIToFIPaymentCancellationRequest\n"
+            "SWIFT Reference: swi00001-2026-10-07T10:00:00.00001.1234567Z")
+    c = classify(parse_swift("SWIFT Incoming MX message-07/10/26-10.00.00MpBroadcastEMX-0001-000001", body))
+    assert c.business_purpose == "FI To FI Payment Cancellation Request"

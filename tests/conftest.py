@@ -21,6 +21,7 @@ os.environ["CANCELLATION_ACTION_MX_TYPES"] = "camt.056"
 os.environ["POLL_FOLDERS"] = "inbox,junkemail"
 os.environ["POLL_INTERVAL_SECONDS"] = "30"
 os.environ["FRONTEND_ORIGIN"] = "http://localhost:5000"
+os.environ.pop("SWIFT_API_BASE", None)  # frontend default must be tested, not a dev override
 
 import pytest  # noqa: E402
 

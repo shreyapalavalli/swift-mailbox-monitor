@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}Overview · SWIFT Monitor{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div id="priority-alert-strip" class="alert-strip"></div>
+</section>
+
+<section id="metrics-grid" class="metrics-grid"></section>
+
+<section class="dashboard-grid">
+    <div class="panel">
+        <div class="panel-header">
+            <h2>Work queue</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Priority</th>
+                        <th>Ref</th>
+                        <th>Type</th>
+                        <th>Category</th>
+                        <th>Amount</th>
+                        <th>Age</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="overview-queue-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-header">
+            <h2>Live activity</h2>
+        </div>
+        <ul id="activity-feed" class="activity-feed"></ul>
+    </div>
+</section>
+
+<script>
+    document.body.dataset.page = 'overview';
+</script>
+<script>
+    window.swiftMonitorApp = window.swiftMonitorApp || {};
+    window.swiftMonitorApp.page = 'overview';
+</script>
+{% endblock %}
