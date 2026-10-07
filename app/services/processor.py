@@ -61,48 +61,72 @@ class SwiftProcessor:
                 row = await self.process_message(msg)
                 summary["processed"] += 1
                 summary["failed"] += row["outcome"] == "FAILED"
-                by_action = summary["by_action"]
-                by_action[row["action"]] = by_action.get(row["action"], 0) + 1
+                if row["action"]:
+                    by_action = summary["by_action"]
+                    by_action[row["action"]] = by_action.get(row["action"], 0) + 1
         return summary
 
     async def process_message(self, msg: EmailMessage) -> dict:
-        parsed = parse_swift(msg.subject, msg.body)
-        classification = classify(parsed)
-        decision = decide(parsed, classification, self.action_mx_types)
-        reference = parsed.reference or msg.id
+        """Run the message's remaining steps and record the outcome.
 
+        httpx errors and other Exceptions are recorded as FAILED and contained. RuntimeError
+        (sign-in required) and BaseExceptions are re-raised, after persisting progress if a
+        step completed in this call, so a retry never repeats a forward or reply.
+        """
         prior = self.repo.get_processed(msg.id)
-        done = set((prior or {}).get("completed_steps", "").split(",")) - {""}
-        steps = STEPS[decision.action]
-        error = None
-        for step in steps:
-            if step in done:
-                continue
-            try:
-                await self._run_step(step, msg, parsed, classification, decision, reference)
-            except httpx.HTTPError as exc:
-                error = str(exc)[:500]
-                break
-            done.add(step)
-
+        prior_steps = [s for s in ((prior or {}).get("completed_steps") or "").split(",") if s]
+        done = set(prior_steps)
         row = {
             "graph_message_id": msg.id,
             "folder": msg.folder,
             "received_at": msg.received_date_time.isoformat() if msg.received_date_time else None,
             "subject": msg.subject,
             "sender": msg.sender,
-            "is_swift": int(parsed.is_swift),
-            "reference": reference if parsed.is_swift else None,
-            "message_type": parsed.message_type,
-            "category": decision.category,
-            "action": decision.action.value,
-            "status": decision.status,
-            "outcome": "FAILED" if error else "DONE",
-            "completed_steps": ",".join(s for s in steps if s in done),
-            "error": error,
+            "is_swift": 0,
+            "reference": None,
+            "message_type": None,
+            "category": None,
+            "action": None,
+            "status": None,
         }
-        self.repo.record_processed(row)
-        return row
+        steps: tuple[str, ...] | None = None
+
+        def finish(error: str | None) -> dict:
+            ordered = [s for s in steps if s in done] if steps is not None else prior_steps
+            row.update(outcome="FAILED" if error else "DONE",
+                       completed_steps=",".join(ordered), error=error)
+            self.repo.record_processed(row)
+            return row
+
+        try:
+            parsed = parse_swift(msg.subject, msg.body)
+            classification = classify(parsed)
+            decision = decide(parsed, classification, self.action_mx_types)
+            reference = parsed.reference or msg.id
+            steps = STEPS[decision.action]
+            row.update(is_swift=int(parsed.is_swift),
+                       reference=reference if parsed.is_swift else None,
+                       message_type=parsed.message_type, category=decision.category,
+                       action=decision.action.value, status=decision.status)
+            for step in steps:
+                if step in done:
+                    continue
+                try:
+                    await self._run_step(step, msg, parsed, classification, decision, reference)
+                except httpx.HTTPError as exc:
+                    return finish(str(exc)[:500])
+                done.add(step)
+        except Exception as exc:
+            if not isinstance(exc, RuntimeError):
+                return finish(repr(exc)[:500])
+            if done != set(prior_steps):
+                finish(repr(exc)[:500])
+            raise
+        except BaseException as exc:
+            if done != set(prior_steps):
+                finish(repr(exc)[:500])
+            raise
+        return finish(None)
 
     async def _run_step(self, step: str, msg: EmailMessage, parsed: ParsedSwift,
                         classification: Classification, decision: Decision, reference: str) -> None:

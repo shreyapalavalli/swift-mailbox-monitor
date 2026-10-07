@@ -231,3 +231,81 @@ def test_routes_share_dependency_singletons():
     assert mail_routes.mail_service is app.dependencies.mail_service
     assert app.dependencies.processor.mail is app.dependencies.mail_service
     assert app.dependencies.mail_service.graph_client.auth_service is app.dependencies.auth_service
+
+
+_CALLBACK_BODY = ("Swift Output: FIN 199 Free Format Message\nSender : WFBIUS6SXXX\n"
+                  "20: Transaction Reference Number\nCBK260908-0001\n"
+                  "79: Narrative\nPLS CALL BACK TO CONFIRM FT26090811223\nMessage Trailer")
+
+
+def test_store_crash_after_reply_is_recorded_and_not_replied_again(setup, monkeypatch):
+    fake, repo, proc = setup([_msg("id-cb", _SUBJECT, _CALLBACK_BODY)])
+    real_upsert = repo.upsert_action
+    calls = {"n": 0}
+
+    def flaky_upsert(row):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise KeyError("boom")
+        real_upsert(row)
+
+    monkeypatch.setattr(repo, "upsert_action", flaky_upsert)
+    first = asyncio.run(proc.run_once())
+    row = repo.get_processed("id-cb")
+    assert first["failed"] == 1
+    assert (row["outcome"], row["completed_steps"]) == ("FAILED", "REPLIED,MARKED_READ")
+    assert "KeyError" in row["error"]
+
+    asyncio.run(proc.run_once())
+    row = repo.get_processed("id-cb")
+    assert (row["outcome"], row["completed_steps"]) == ("DONE", "REPLIED,MARKED_READ,STORED")
+    assert len(fake.replies) == 1 and fake.marked_read == ["id-cb"]
+    assert repo.get_action("CBK260908-0001")["status"] == "RESPONDED"
+
+
+def test_sign_in_error_after_forward_persists_progress(setup, fixture_inbox):
+    fake, repo, proc = setup(fixture_inbox)
+    real_mark = fake.mark_as_read
+
+    async def signed_out(message_id):
+        raise RuntimeError("Microsoft sign-in required. Visit /auth/login first.")
+
+    fake.mark_as_read = signed_out
+    with pytest.raises(RuntimeError, match="sign-in required"):
+        asyncio.run(proc.run_once())
+    row = repo.get_processed("id-sgu")
+    assert (row["outcome"], row["completed_steps"]) == ("FAILED", "FORWARDED")
+
+    fake.mark_as_read = real_mark
+    asyncio.run(proc.run_once())
+    row = repo.get_processed("id-sgu")
+    assert (row["outcome"], row["completed_steps"]) == ("DONE", "FORWARDED,MARKED_READ")
+    assert fake.forwards == [("id-sgu", CST)]
+    assert "id-sgu" in fake.marked_read
+
+
+def test_poison_message_is_recorded_and_others_still_processed(tmp_path, load_fixture, monkeypatch):
+    import app.services.processor as processor_module
+
+    real_parse = processor_module.parse_swift
+
+    def parse(subject, body):
+        if body == "POISON":
+            raise ValueError("cannot parse")
+        return real_parse(subject, body)
+
+    monkeypatch.setattr(processor_module, "parse_swift", parse)
+    inbox = [_msg("id-poison", _SUBJECT, "POISON"),
+             _from_fixture(load_fixture, "id-sgu", "mt199_sgu_related_ref")]
+    junk = [_from_fixture(load_fixture, "id-cancel", "mt199_return_funds_cancellation")]
+    fake = FakeMail({"inbox": inbox, "junkemail": junk})
+    repo = SwiftRepository(str(tmp_path / "p.db"))
+    proc = SwiftProcessor(fake, repo, ["inbox", "junkemail"], CST, ["camt.056"])
+
+    summary = asyncio.run(proc.run_once())
+    row = repo.get_processed("id-poison")
+    assert (row["outcome"], row["completed_steps"]) == ("FAILED", "")
+    assert "cannot parse" in row["error"]
+    assert summary["failed"] == 1 and summary["processed"] == 3
+    assert fake.forwards == [("id-sgu", CST)]
+    assert set(fake.marked_read) == {"id-sgu", "id-cancel"}
