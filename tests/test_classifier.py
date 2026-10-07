@@ -126,3 +126,47 @@ def test_negation_keeps_type_prior():
 
 def test_non_cancellation_categories_are_not_strong():
     assert classify(parsed_from_narrative("PLEASE AMEND FIELD 59 TO READ ACME LTD")).strong is False
+
+
+@pytest.mark.parametrize("text,category", [
+    ("WE ARE AMENDING FIELD 59", Category.AMENDMENT),
+    ("MODIFICATION OF FIELD 59 REQUESTED", Category.AMENDMENT),
+    ("KINDLY CHANGE BENEFICIARY NAME TO ACME LTD", Category.AMENDMENT),
+    ("REQUEST TO CORRECT FIELD 59", Category.AMENDMENT),
+    ("PLS CALL US BACK RE FT26090811223", Category.CALLBACK),
+    ("PLEASE CONFIRM THE DETAILS BY PHONE", Category.CALLBACK),
+    ("WE ARE CANCELLING OUR PAYMENT 123", Category.CANCELLATION),
+    ("PAYMENT REVOKED BY ORDERING CUSTOMER", Category.CANCELLATION),
+])
+def test_inflected_forms_and_phrases(text, category):
+    assert classify(parsed_from_narrative(text)).category is category
+
+
+def test_stem_counts_once_per_category():
+    c = classify(parsed_from_narrative("CANCELLATION: WE CANCELLED AND ARE CANCELLING"))
+    assert c.category is Category.CANCELLATION
+    assert c.matched_terms == ("CANCELLATION",)
+    assert c.strong is False           # one stem = 2 points: analyst review
+
+
+def test_amend_and_modif_stems_score_3_and_2():
+    c = classify(parsed_from_narrative("AMENDMENT AND MODIFIED DETAILS"))
+    assert c.matched_terms == ("AMENDMENT", "MODIFIED")
+    assert c.confidence == 1.0
+
+
+def test_revoked_matches_stem():
+    c = classify(parsed_from_narrative("CUSTOMER REVOKES"))
+    assert c.matched_terms == ("REVOKES",)
+
+
+def test_token_used_by_a_stem_never_also_scores_a_term_of_that_category():
+    from app.swift.classifier import _token_hits
+
+    hits = _token_hits(stems=(("REVOK", 2),), terms=(("REVOKED", 2), ("RECALL", 2)),
+                       tokens=["REVOKED", "RECALLED"])
+    assert hits == [("REVOKED", 2), ("RECALL", 2)]     # RECALLED fuzzy-matches RECALL; REVOKED only once
+
+
+def test_ocr_typo_on_exact_term_still_fuzzy():
+    assert classify(parsed_from_narrative("PLS ARRANGE CALLBAK FOR FT26090811223")).category is Category.CALLBACK

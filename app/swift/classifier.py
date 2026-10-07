@@ -25,31 +25,47 @@ class Classification:
     strong: bool = False  # CANCELLATION only: evidence strong enough to auto-close
 
 
-# Category -> (phrases, tokens), each a tuple of (term, weight). Dict order is the tie-break order.
-_LEXICON: dict[Category, tuple[tuple[tuple[str, float], ...], tuple[tuple[str, float], ...]]] = {
+Phrase = tuple[str, re.Pattern, float]  # (label shown in matched_terms, pattern, weight)
+Weighted = tuple[tuple[str, float], ...]
+
+
+def _words(phrase: str, weight: float) -> Phrase:
+    return phrase, re.compile(r"\b" + r"\s+".join(map(re.escape, phrase.split())) + r"\b"), weight
+
+
+def _regex(label: str, pattern: str, weight: float) -> Phrase:
+    return label, re.compile(pattern), weight
+
+
+# Category -> (phrases, stems, terms). Stems match any token they prefix (CANCEL -> CANCELLING) and
+# count once; terms match whole tokens, or OCR typos of 5+ chars. Dict order is the tie-break order.
+_LEXICON: dict[Category, tuple[tuple[Phrase, ...], Weighted, Weighted]] = {
     Category.CANCELLATION: (
-        (("RETURN THE FUNDS", 3), ("RETURN OF FUNDS", 3), ("REQUEST FOR CANCELLATION", 3),
-         ("PLEASE CANCEL", 3), ("STOP PAYMENT", 3), ("PAYER'S REQUEST", 1)),
-        (("CANCEL", 2), ("CANCELLATION", 2), ("CANCELLED", 2), ("RECALL", 2), ("REVOKE", 2), ("REFUND", 2)),
+        (_words("RETURN THE FUNDS", 3), _words("RETURN OF FUNDS", 3), _words("REQUEST FOR CANCELLATION", 3),
+         _words("PLEASE CANCEL", 3), _words("STOP PAYMENT", 3), _words("PAYER'S REQUEST", 1)),
+        (("CANCEL", 2), ("REVOK", 2)),
+        (("RECALL", 2), ("REFUND", 2)),
     ),
     Category.AMENDMENT: (
-        (("PLEASE AMEND", 3), ("CHANGE THE BENEFICIARY", 3), ("CORRECT THE BENEFICIARY", 3),
-         ("SHOULD READ", 2), ("INSTEAD OF", 1)),
-        (("AMEND", 3), ("AMENDMENT", 3), ("AMENDED", 3), ("MODIFY", 2), ("REVISED", 1)),
+        (_words("PLEASE AMEND", 3),
+         _regex("CHANGE BENEFICIARY", r"\bCHANGE\b.{0,25}\bBENEFICIARY\b", 3),
+         _regex("CORRECT DETAILS", r"\bCORRECT\b.{0,25}\b(?:FIELD|BENEFICIARY|NAME|ACCOUNT)\b", 3),
+         _words("SHOULD READ", 2), _words("INSTEAD OF", 1)),
+        (("AMEND", 3), ("MODIF", 2)),
+        (("REVISED", 1),),
     ),
     Category.CALLBACK: (
-        (("CALL BACK", 3), ("CONFIRM BY PHONE", 3), ("VERIFY BY TELEPHONE", 3), ("PHONE CONFIRMATION", 2)),
+        (_regex("CALL BACK", r"\bCALL\s+(?:US\s+|ME\s+|THE\s+REMITTER\s+)?BACK\b", 3),
+         _regex("CONFIRM BY PHONE", r"\bCONFIRM\b.{0,40}\bBY\s+(?:PHONE|TELEPHONE)\b", 3),
+         _words("VERIFY BY TELEPHONE", 3), _words("PHONE CONFIRMATION", 2)),
+        (),
         (("CALLBACK", 3), ("TELEPHONE", 1)),
     ),
     Category.ABA_REQUEST: (
-        (("ROUTING NUMBER", 3), ("ROUTING NO", 3), ("VALID ABA", 3)),
+        (_words("ROUTING NUMBER", 3), _words("ROUTING NO", 3), _words("VALID ABA", 3)),
+        (),
         (("ABA", 3), ("FEDWIRE", 1)),
     ),
-}
-
-_PHRASE_PATTERNS = {
-    phrase: re.compile(r"\b" + r"\s+".join(map(re.escape, phrase.split())) + r"\b")
-    for phrases, _ in _LEXICON.values() for phrase, _ in phrases
 }
 
 THRESHOLD = 2.0
@@ -68,12 +84,25 @@ _NEGATED_CANCELLATION = re.compile(
     r"|\bNOT\s+A\s+CANCELLATION\b")
 
 
-def _token_matches(term: str, tokens: set[str]) -> bool:
+def _token_matches(term: str, tokens: list[str]) -> bool:
     if term in tokens:
         return True
     if len(term) < _FUZZY_MIN_LEN:
         return False
     return any(SequenceMatcher(None, tok, term).ratio() >= _FUZZY_RATIO for tok in tokens)
+
+
+def _token_hits(stems: Weighted, terms: Weighted, tokens: list[str]) -> list[tuple[str, float]]:
+    """Score stems (once each, labelled by the first matching token), then terms on the tokens left over."""
+    hits: list[tuple[str, float]] = []
+    used: set[str] = set()
+    for stem, weight in stems:
+        matching = [tok for tok in tokens if tok.startswith(stem)]
+        if matching:
+            hits.append((matching[0], weight))
+            used.update(matching)
+    rest = [tok for tok in tokens if tok not in used]
+    return hits + [(term, weight) for term, weight in terms if _token_matches(term, rest)]
 
 
 def _mx_name(parsed: ParsedSwift) -> str | None:
@@ -109,7 +138,7 @@ def _business_purpose(parsed: ParsedSwift, mx_name: str | None) -> str | None:
 
 def classify(parsed: ParsedSwift) -> Classification:
     text = (parsed.text if parsed.format == "MX" else parsed.narrative).upper()
-    tokens = set(_TOKEN.findall(text))
+    tokens = list(dict.fromkeys(_TOKEN.findall(text)))  # unique, in text order
     mx_name = _mx_name(parsed)
     prior = _type_prior(parsed, mx_name)
 
@@ -118,11 +147,11 @@ def classify(parsed: ParsedSwift) -> Classification:
     scores: dict[Category, float] = {}
     matches: dict[Category, tuple[str, ...]] = {}
     phrase_hit: dict[Category, bool] = {}
-    for category, (phrases, terms) in _LEXICON.items():
+    for category, (phrases, stems, terms) in _LEXICON.items():
         ignored = negated and category is Category.CANCELLATION  # "DO NOT CANCEL": only the type prior counts
-        phrase_hits = [] if ignored else [(p, w) for p, w in phrases if _PHRASE_PATTERNS[p].search(text)]
-        term_hits = [] if ignored else [(t, w) for t, w in terms if _token_matches(t, tokens)]
-        hits = phrase_hits + term_hits
+        phrase_hits = [] if ignored else [(label, w) for label, pattern, w in phrases if pattern.search(text)]
+        token_hits = [] if ignored else _token_hits(stems, terms, tokens)
+        hits = phrase_hits + token_hits
         phrase_hit[category] = bool(phrase_hits)
         scores[category] = sum(w for _, w in hits) + (TYPE_PRIOR if category is prior else 0.0)
         matches[category] = tuple(term for term, _ in hits)
