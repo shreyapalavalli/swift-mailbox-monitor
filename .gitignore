@@ -10,3 +10,4 @@ venv/
 .token_cache.json
 data/
 .github_token
+*.mp4
