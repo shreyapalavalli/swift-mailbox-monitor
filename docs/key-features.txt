@@ -1,0 +1,7 @@
+- Live mailbox monitoring: reads the Outlook mailbox continuously through Microsoft Graph.
+- Smart extraction: pulls the reference, message type, BICs, amount and business purpose from MT and MX messages, even messy OCR'd ones.
+- Explainable classification: uses only standard-library Python and shows why each decision was made.
+- Automated actions: routes SGU references to CST, auto-closes cancellations, and auto-replies to FT/INV callbacks.
+- Real-time priority alerts: amendments appear on the dashboard within seconds.
+- Analyst workflow: work queue, detail view, Start → Resolve, and a full audit log.
+- Safe and reliable: never processes an email twice, recovers safely from failures, and has a dry-run mode.
