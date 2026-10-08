@@ -1,0 +1,6 @@
+- Time saved: about 6–7 analyst-hours a day (200+ messages at about 2 minutes each). Each message is handled about 10–20 seconds after arrival instead of waiting in the queue.
+- Cost reduction: roughly 0.8 of a full-time analyst freed up for exception work, with no extra hires needed as volumes grow.
+- Risk reduction: amendments are flagged within seconds, so none are missed. The system never forwards or replies to the same email twice, recovers safely from failures, and logs every action.
+- Better UX: one live dashboard with priority alerts, the key details already extracted, a plain-English reason for each decision, and one-click Start and Resolve. Analysts no longer have to open every email.
+- Process standardization: the same configurable rules are applied to every message, with a consistent outcome and status for each type and a full audit trail.
+- Scalability: handles growing volumes (3,000+ a month today) with no extra effort. New rules or message types can be added through configuration, and the same approach could be reused for other shared mailboxes.
