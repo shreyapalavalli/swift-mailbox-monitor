@@ -2,15 +2,19 @@
 
 {% block title %}Detail · SWIFT Monitor{% endblock %}
 
+{% block heading %}SWIFT detail{% endblock %}
+{% block subheading %}Extracted fields, classification and the original message text.{% endblock %}
+
 {% block content %}
-<section class="panel">
+<section class="panel detail-head">
     <div class="detail-header">
         <div>
             <div id="detail-reference" class="detail-title">Loading…</div>
             <div id="detail-meta" class="muted"></div>
         </div>
         <div class="detail-actions">
-            <button id="detail-start-btn" class="btn btn-secondary" type="button">Start</button>
+            <a class="btn ghost" href="/queue">Back to queue</a>
+            <button id="detail-start-btn" class="btn ghost" type="button">Start</button>
             <button id="detail-resolve-btn" class="btn btn-primary" type="button">Resolve</button>
         </div>
     </div>

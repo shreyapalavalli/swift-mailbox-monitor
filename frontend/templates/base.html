@@ -48,9 +48,11 @@
             </div>
         </header>
 
-        <h1 id="title">SWIFT Monitor</h1>
-        <p class="sub" id="sub">Incoming SWIFT messages, classified and actioned automatically.</p>
+        <h1 id="title">{% block heading %}SWIFT Monitor{% endblock %}</h1>
+        <p class="sub" id="sub">{% block subheading %}Incoming SWIFT messages, classified and actioned automatically.{% endblock %}</p>
         <div class="header-divider" aria-hidden="true"></div>
+
+        <p id="date-note" class="date-note hidden"></p>
 
         <div id="dry-run-banner" class="banner hidden">Dry run: classification only, no mailbox changes are being made.</div>
 
@@ -75,12 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (typeof datePicker.showPicker === 'function') datePicker.showPicker();
             else datePicker.click();
         });
-        datePicker.addEventListener('change', () => {
-            window.swiftMonitorStore.selectedDate = datePicker.value || null;
-            if (window.swiftMonitorApp && typeof window.swiftMonitorApp.refreshAll === 'function') {
-                window.swiftMonitorApp.refreshAll();
-            }
-        });
+        datePicker.addEventListener('change', () => window.swiftMonitorApp.setDate(datePicker.value || null));
     }
     const nav = document.getElementById('nav');
     if (nav) nav.addEventListener('change', () => {

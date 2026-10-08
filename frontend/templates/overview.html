@@ -3,16 +3,14 @@
 {% block title %}Overview · SWIFT Monitor{% endblock %}
 
 {% block content %}
-<section class="panel">
-    <div id="priority-alert-strip" class="alert-strip"></div>
-</section>
+<section id="priority-alert-strip" class="alerts" aria-live="polite"></section>
 
 <section id="metrics-grid" class="metrics-grid"></section>
 
 <section class="dashboard-grid">
     <div class="panel">
         <div class="panel-header">
-            <h2>Work queue</h2>
+            <h2>Work queue <small><a href="/queue">View all</a></small></h2>
         </div>
         <div class="table-wrap">
             <table class="data-table">
@@ -25,7 +23,7 @@
                         <th>Amount</th>
                         <th>Age</th>
                         <th>Status</th>
-                        <th>Actions</th>
+                        <th class="right">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="overview-queue-body"></tbody>
@@ -43,9 +41,5 @@
 
 <script>
     document.body.dataset.page = 'overview';
-</script>
-<script>
-    window.swiftMonitorApp = window.swiftMonitorApp || {};
-    window.swiftMonitorApp.page = 'overview';
 </script>
 {% endblock %}
