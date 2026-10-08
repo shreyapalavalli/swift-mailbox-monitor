@@ -1,0 +1,6 @@
+- Faster response: SWIFT messages are classified and actioned about 10–20 seconds after they reach the mailbox, instead of waiting for someone to read them.
+- Less manual effort: routine traffic is handled with no analyst involvement: SGU routing to the CST team, cancellation closure, and FT/INV callback acknowledgements. At about 2 minutes per message, that frees an estimated 6–7 analyst-hours a day across 200+ daily messages.
+- No missed amendments: every amendment appears straight away as a priority alert with the key details needed to act.
+- Consistent, auditable decisions: the same rules are applied every time, each decision is explained, and every email and action is logged.
+- Safe operation: no duplicate forwards or replies, safe recovery from failures, and a dry-run mode for rollout.
+- Proven in testing: 427 automated backend tests and 36 browser checks pass, and a live demo correctly handled all six scenario message types end to end.
