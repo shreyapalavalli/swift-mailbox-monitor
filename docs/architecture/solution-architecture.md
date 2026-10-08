@@ -1,4 +1,21 @@
+<p align="center">
+  <img src="assets/banner.svg" alt="SWIFT Mailbox Monitor: Solution Architecture" width="100%"/>
+</p>
+
+<p align="center">
+  <img alt="Backend" src="https://img.shields.io/badge/Backend-FastAPI-E60028?style=for-the-badge&labelColor=000000"/>
+  <img alt="Frontend" src="https://img.shields.io/badge/Frontend-Flask%20%2B%20vanilla%20JS-E60028?style=for-the-badge&labelColor=000000"/>
+  <img alt="Mailbox" src="https://img.shields.io/badge/Mailbox-Microsoft%20Graph-E60028?style=for-the-badge&labelColor=000000"/>
+  <img alt="Store" src="https://img.shields.io/badge/Store-SQLite%20WAL-E60028?style=for-the-badge&labelColor=000000"/>
+  <img alt="NLP" src="https://img.shields.io/badge/NLP-Python%20stdlib%20only-000000?style=for-the-badge&labelColor=E60028"/>
+</p>
+
 # SWIFT Mailbox Monitor: Solution Architecture
+
+<p align="center"><img src="assets/glance.svg" alt="At a glance" width="100%"/></p>
+
+> [!IMPORTANT]
+> **The one-line pitch:** every SWIFT email that lands in the Outlook mailbox is read, understood and actioned in seconds. Amendments flash up as **🔴 priority alerts** on the dashboard; routine traffic is closed, forwarded or answered automatically.
 
 ## 1. Purpose
 
@@ -18,22 +35,43 @@ Rules are evaluated in order; the first match wins (`app/swift/rules.py`).
 
 | # | Condition | Action | Resulting status | Priority |
 |---|---|---|---|---|
-| 1 | Email is not a SWIFT message | Ignore (logged only) | `IGNORED` | Low |
-| 2 | Any reference (fields 20/21 or narrative) starts with `SGU` | Forward to the CST team mailbox, then mark read | `ROUTED_CST` | Normal |
-| 3 | Cancellation whose MX type is in `CANCELLATION_ACTION_MX_TYPES` (default `camt.056`) | Store for analyst | `ACTION_REQUIRED` | High |
-| 4 | Cancellation with strong evidence (MTn92 type, camt.056/058, or explicit phrases) | Mark read (auto-close) | `AUTO_CLOSED` | Low |
-| 5 | Cancellation with weak evidence | Store for analyst | `ACTION_REQUIRED` | Normal |
-| 6 | Amendment | Store and raise a **priority alert** on the dashboard | `PRIORITY` | High |
-| 7 | Callback with an `FT…` or `INV…` reference | Reply-all acknowledgement, store, mark read | `RESPONDED` | Normal |
-| 8 | Callback without an FT/INV reference | Store for analyst | `ACTION_REQUIRED` | Normal |
-| 9 | ABA / routing-number request | Store for analyst | `ACTION_REQUIRED` | Normal |
-| 10 | Any other SWIFT message | Store for analyst | `ACTION_REQUIRED` | Normal |
+| 1 | Email is not a SWIFT message | Ignore (logged only) | `IGNORED` | ⚪ Low |
+| 2 | Any reference (fields 20/21 or narrative) starts with `SGU` | Forward to the CST team mailbox, then mark read | `ROUTED_CST` | ⚫ Normal |
+| 3 | Cancellation whose MX type is in `CANCELLATION_ACTION_MX_TYPES` (default `camt.056`) | Store for analyst | `ACTION_REQUIRED` | 🔴 **High** |
+| 4 | Cancellation with strong evidence (MTn92 type, camt.056/058, or explicit phrases) | Mark read (auto-close) | `AUTO_CLOSED` | ⚪ Low |
+| 5 | Cancellation with weak evidence | Store for analyst | `ACTION_REQUIRED` | ⚫ Normal |
+| 6 | Amendment | Store and raise a **priority alert** on the dashboard | **`PRIORITY`** | 🔴 **High** |
+| 7 | Callback with an `FT…` or `INV…` reference | Reply-all acknowledgement, store, mark read | `RESPONDED` | ⚫ Normal |
+| 8 | Callback without an FT/INV reference | Store for analyst | `ACTION_REQUIRED` | ⚫ Normal |
+| 9 | ABA / routing-number request | Store for analyst | `ACTION_REQUIRED` | ⚫ Normal |
+| 10 | Any other SWIFT message | Store for analyst | `ACTION_REQUIRED` | ⚫ Normal |
+
+<sub>🔴 High · ⚫ Normal · ⚪ Low</sub>
 
 Analysts then move stored items through `ACTION_REQUIRED` / `PRIORITY` → `IN_PROGRESS` → `RESOLVED` from the dashboard.
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#000000','primaryTextColor':'#ffffff','primaryBorderColor':'#000000','lineColor':'#E60028','transitionColor':'#E60028','stateLabelColor':'#ffffff'}}}%%
+stateDiagram-v2
+    direction LR
+    [*] --> PRIORITY: amendment
+    [*] --> ACTION_REQUIRED: needs analyst
+    PRIORITY --> IN_PROGRESS: Start
+    ACTION_REQUIRED --> IN_PROGRESS: Start
+    IN_PROGRESS --> RESOLVED: Resolve
+    PRIORITY --> RESOLVED: Resolve
+    ACTION_REQUIRED --> RESOLVED: Resolve
+    RESOLVED --> [*]
+    classDef hot fill:#E60028,stroke:#E60028,color:#fff
+    classDef done fill:#fff,stroke:#000,color:#000,stroke-width:2px
+    class PRIORITY hot
+    class RESOLVED done
+```
 
 ## 3. Context
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#000000','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#E60028','secondaryColor':'#ffffff','tertiaryColor':'#ffffff','clusterBkg':'#ffffff','clusterBorder':'#E60028','edgeLabelBackground':'#ffffff','textColor':'#000000','titleColor':'#000000'}}}%%
 flowchart LR
     Sender["Counterparty banks<br/>(demo: Gmail generator)"] -- SWIFT email --> Mailbox[("Outlook mailbox<br/>Inbox + Junk")]
     Mailbox <-- "Microsoft Graph<br/>(read, mark read, forward, reply)" --> Backend["SWIFT Monitor backend<br/>FastAPI + SQLite"]
@@ -42,11 +80,20 @@ flowchart LR
     Frontend["Dashboard<br/>Flask + vanilla JS"] -- "REST / JSON polling" --> Backend
     Analyst(("Operations analyst")) --> Frontend
     Entra["Microsoft identity platform<br/>(tenant: consumers)"] -. delegated OAuth tokens .-> Backend
+    classDef sg fill:#000,stroke:#000,color:#fff,stroke-width:1px
+    classDef red fill:#E60028,stroke:#E60028,color:#fff
+    classDef ext fill:#fff,stroke:#000,color:#000,stroke-width:2px
+    classDef store fill:#fff,stroke:#E60028,color:#000,stroke-width:2px
+    class Backend red
+    class Frontend sg
+    class Mailbox store
+    class Sender,CST,Entra,Analyst ext
 ```
 
 ## 4. Logical architecture
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#000000','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#E60028','secondaryColor':'#ffffff','tertiaryColor':'#ffffff','clusterBkg':'#ffffff','clusterBorder':'#E60028','edgeLabelBackground':'#ffffff','textColor':'#000000','titleColor':'#000000'}}}%%
 flowchart TB
     subgraph FE["Frontend (frontend/, port 5001)"]
         Pages["Pages: Overview · Work queue · Activity · System · SWIFT detail"]
@@ -74,6 +121,17 @@ flowchart TB
     Proc --> Graph --> MSGraph
     Proc --> Repo --> DB
     API --> Repo
+    classDef sg fill:#000,stroke:#000,color:#fff,stroke-width:1px
+    classDef red fill:#E60028,stroke:#E60028,color:#fff
+    classDef ext fill:#fff,stroke:#000,color:#000,stroke-width:2px
+    classDef store fill:#fff,stroke:#E60028,color:#000,stroke-width:2px
+    class Proc,Rules red
+    class Pages,JS,API,Poller,Norm,Parse,Cls,Graph,Repo sg
+    class DB store
+    class MSGraph ext
+    style NLP fill:#fff5f6,stroke:#E60028,stroke-width:2px,color:#000
+    style FE fill:#ffffff,stroke:#000,stroke-width:2px,color:#000
+    style BE fill:#ffffff,stroke:#E60028,stroke-width:3px,color:#000
 ```
 
 ### 4.1 Components
@@ -96,6 +154,7 @@ flowchart TB
 ## 5. Processing flow
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'actorBkg':'#000000','actorBorder':'#000000','actorTextColor':'#ffffff','actorLineColor':'#E60028','signalColor':'#000000','signalTextColor':'#000000','sequenceNumberColor':'#ffffff','labelBoxBkgColor':'#E60028','labelBoxBorderColor':'#E60028','labelTextColor':'#ffffff','loopTextColor':'#000000','noteBkgColor':'#fff5f6','noteBorderColor':'#E60028','activationBkgColor':'#E60028','altSectionBkgColor':'#fff5f6'}}}%%
 sequenceDiagram
     autonumber
     participant P as Poller / "Check now"
@@ -136,6 +195,9 @@ sequenceDiagram
 | `STORE_FOR_ANALYST` | `STORED` (left unread in Outlook) |
 | `IGNORE` | none (logged only) |
 
+> [!TIP]
+> **Reliability properties:** nothing is ever forwarded or replied to twice, even across crashes.
+
 **Reliability properties**
 
 - **Idempotent:** a message is processed at most once. Unread messages that were already handled, such as stored items, are skipped on later polls.
@@ -147,6 +209,7 @@ sequenceDiagram
 ## 6. Data model
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#fff5f6','primaryTextColor':'#000000','primaryBorderColor':'#E60028','lineColor':'#E60028','textColor':'#000000','attributeBackgroundColorOdd':'#ffffff','attributeBackgroundColorEven':'#fff5f6','tertiaryColor':'#ffffff'}}}%%
 erDiagram
     processed_messages {
         TEXT graph_message_id PK
@@ -227,6 +290,7 @@ Interactive documentation is served at `/docs` (OpenAPI).
 ## 9. Deployment view (hackathon / local)
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#000000','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#E60028','secondaryColor':'#ffffff','tertiaryColor':'#ffffff','clusterBkg':'#ffffff','clusterBorder':'#E60028','edgeLabelBackground':'#ffffff','textColor':'#000000','titleColor':'#000000'}}}%%
 flowchart LR
     subgraph Laptop["Developer / demo laptop (macOS or Windows)"]
         U["uvicorn app.main:app :8000"] --- DB[("data/swift_monitor.db")]
@@ -238,6 +302,15 @@ flowchart LR
     Browser --> U
     U <--> MS["graph.microsoft.com"]
     Gen --> Gmail["smtp.gmail.com:587 (TLS, certifi CA bundle)"]
+    classDef sg fill:#000,stroke:#000,color:#fff,stroke-width:1px
+    classDef red fill:#E60028,stroke:#E60028,color:#fff
+    classDef ext fill:#fff,stroke:#000,color:#000,stroke-width:2px
+    classDef store fill:#fff,stroke:#E60028,color:#000,stroke-width:2px
+    class U red
+    class F,Gen sg
+    class DB,TC store
+    class Browser,MS,Gmail ext
+    style Laptop fill:#fff,stroke:#E60028,stroke-width:3px,color:#000
 ```
 
 | Setting (`.env`) | Purpose | Default |
@@ -260,6 +333,9 @@ flowchart LR
 
 ## 10. Security considerations
 
+> [!CAUTION]
+> Email content is treated as **untrusted input** end to end.
+
 - **Delegated permissions only** (least privilege for a single mailbox). No client secret: the app is a public client.
 - **Local secrets:** the token cache is stored with `0600` permissions, and secrets (`.env`, token cache, `data/`) are git-ignored.
 - **Fixtures:** test fixtures have IBANs and names masked.
@@ -277,3 +353,7 @@ flowchart LR
 | Hosting | Two local processes | Containerised backend + frontend behind SSO (Entra ID), single origin |
 | Classification | Lexicon + rules (explainable, stdlib only) | Keep rules as the decision layer; feed analyst corrections back into the lexicon and track precision/recall per category |
 | Observability | Application logs, `/api/process/log` | Structured logs, metrics (latency, failures, queue age) and alerting on `FAILED` / sign-in loss |
+
+---
+
+<p align="center"><sub><b>SWIFT Mailbox Monitor</b> · built for the SG hackathon · <span>🔴⚫⚪</span></sub></p>

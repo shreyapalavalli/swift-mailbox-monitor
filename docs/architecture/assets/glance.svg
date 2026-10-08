@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="170" viewBox="0 0 1200 170" role="img" aria-label="At a glance: 10 business rules, 5 categories, about 10 to 22 seconds from email to dashboard, 0 third-party NLP libraries, 427 automated tests">
+  <style>
+    .l{font:500 15px Helvetica,Arial,sans-serif;fill:#5f6b73}
+    .v{font:800 46px Helvetica,Arial,sans-serif;fill:#000;letter-spacing:-1px}
+    .s{font:500 13px Helvetica,Arial,sans-serif;fill:#5f6b73}
+    .hl{fill:#aeb8be}.hv{fill:#fff}.hs{fill:#c3ccd1}
+  </style>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <g transform="translate(0,10)">
+      <rect width="228" height="150" rx="18" fill="#fff" stroke="#d5dde1" stroke-width="1.5"/>
+      <text x="22" y="36" class="l">Business rules</text><text x="22" y="94" class="v">10</text><text x="22" y="126" class="s">first match wins</text>
+    </g>
+    <g transform="translate(243,10)">
+      <rect width="228" height="150" rx="18" fill="#fff" stroke="#d5dde1" stroke-width="1.5"/>
+      <text x="22" y="36" class="l">SWIFT categories</text><text x="22" y="94" class="v">5</text><text x="22" y="126" class="s">MT + ISO 20022 MX</text>
+    </g>
+    <g transform="translate(486,10)">
+      <rect width="228" height="150" rx="18" fill="#000"/>
+      <path d="M184 0h26a18 18 0 0 1 18 18v26z" fill="#E60028"/>
+      <text x="22" y="36" class="l hl">Email → dashboard</text><text x="22" y="94" class="v hv">10–22 s</text><text x="22" y="126" class="s hs">measured in live demo</text>
+    </g>
+    <g transform="translate(729,10)">
+      <rect width="228" height="150" rx="18" fill="#fff" stroke="#d5dde1" stroke-width="1.5"/>
+      <text x="22" y="36" class="l">Third-party NLP libs</text><text x="22" y="94" class="v" fill="#E60028" style="fill:#E60028">0</text><text x="22" y="126" class="s">stdlib re · difflib · unicodedata</text>
+    </g>
+    <g transform="translate(972,10)">
+      <rect width="228" height="150" rx="18" fill="#fff" stroke="#d5dde1" stroke-width="1.5"/>
+      <text x="22" y="36" class="l">Automated tests</text><text x="22" y="94" class="v">427</text><text x="22" y="126" class="s">+ 36 browser checks</text>
+    </g>
+  </g>
+</svg>
