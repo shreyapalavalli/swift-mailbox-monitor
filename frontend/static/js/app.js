@@ -46,7 +46,7 @@ window.swiftMonitorApp = {
       } finally {
         this.refreshAll({ forceConnectionCheck: true });
         button.disabled = false;
-        button.textContent = 'Check now';
+        button.textContent = 'Check mailbox now';
       }
     });
   },
